@@ -38,8 +38,6 @@ var ValidatorPubkeyPrefixFlag = flag.String("bech-validator-pubkey-prefix", "", 
 var ConsensusNodePrefixFlag = flag.String("bech-consensus-node-prefix", "", "Bech32 consensus node prefix")
 var ConsensusNodePubkeyPrefixFlag = flag.String("bech-consensus-node-pubkey-prefix", "", "Bech32 pubkey consensus node prefix")
 
-var AccountPrefix string
-var AccountPubkeyPrefix string
 var ValidatorPrefix string
 var ValidatorPubkeyPrefix string
 var ConsensusNodePrefix string
@@ -226,7 +224,8 @@ func checkValidators(grpcConn *grpc.ClientConn) {
 		// somehow not all the validators info is returned
 		if validator, found := findValidator(signingInfo.Address); found {
 			validatorLink = fmt.Sprintf(
-				"<a href=\"https://www.mintscan.io/crypto-org/validators/%s\">%s</a>",
+				"<a href=\"https://www.mintscan.io/%s/validators/%s\">%s</a>",
+				*MintscanPrefix,
 				validator.OperatorAddress,
 				validator.Description.Moniker,
 			)
