@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"flag"
 	"fmt"
 	"os"
 	"strings"
@@ -19,29 +18,31 @@ import (
 
 	"github.com/rs/zerolog"
 	telegramBot "gopkg.in/tucnak/telebot.v2"
+
+	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
+	"github.com/spf13/viper"
 )
 
-var NodeAddress = flag.String("node", "localhost:9090", "RPC node address")
-var LogLevel = flag.String("log-level", "info", "Logging level")
-var TelegramToken = flag.String("telegram-token", "", "Telegram bot token")
-var TelegramChat = flag.Int("telegram-chat", 0, "Telegram chat or user ID")
-var Interval = flag.Int("interval", 120, "Interval between two checks, in seconds")
-var Threshold = flag.Int64("threshold", 0, "Threshold of missed blocks")
-var Limit = flag.Uint64("limit", 1000, "gRPC query pagination limit")
-var MintscanPrefix = flag.String("mintscan", "persistence", "Prefix for mintscan links like https://mintscan.io/{prefix}")
+var (
+	ConfigPath     string
+	NodeAddress    string
+	LogLevel       string
+	TelegramToken  string
+	TelegramChat   int
+	Interval       int
+	Threshold      int64
+	Limit          uint64
+	MintscanPrefix string
 
-var PrefixFlag = flag.String("bech-prefix", "persistence", "Bech32 global prefix")
+	Prefix                    string
+	ValidatorPrefix           string
+	ValidatorPubkeyPrefix     string
+	ConsensusNodePrefix       string
+	ConsensusNodePubkeyPrefix string
 
-// some networks, like Iris, have the different prefixes for address, validator and consensus node
-var ValidatorPrefixFlag = flag.String("bech-validator-prefix", "", "Bech32 validator prefix")
-var ValidatorPubkeyPrefixFlag = flag.String("bech-validator-pubkey-prefix", "", "Bech32 pubkey validator prefix")
-var ConsensusNodePrefixFlag = flag.String("bech-consensus-node-prefix", "", "Bech32 consensus node prefix")
-var ConsensusNodePubkeyPrefixFlag = flag.String("bech-consensus-node-pubkey-prefix", "", "Bech32 pubkey consensus node prefix")
-
-var ValidatorPrefix string
-var ValidatorPubkeyPrefix string
-var ConsensusNodePrefix string
-var ConsensusNodePubkeyPrefix string
+	envPrefix string = "MISSED_BLOCKS_COUNTER"
+)
 
 var log = zerolog.New(zerolog.ConsoleWriter{Out: os.Stdout}).With().Timestamp().Logger()
 
@@ -57,50 +58,44 @@ var interfaceRegistry = encCfg.InterfaceRegistry
 
 var validatorsToMonitor []string
 
-func main() {
-	flag.Parse()
-	validatorsToMonitor = flag.Args()
+var rootCmd = &cobra.Command{
+	Use:  "missed-blocks-checker",
+	Long: "Tool to monitor missed blocks for Cosmos-chain validators",
+	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+		if ConfigPath == "" {
+			return nil
+		}
 
-	logLevel, err := zerolog.ParseLevel(*LogLevel)
+		viper.SetConfigFile(ConfigPath)
+		if err := viper.ReadInConfig(); err != nil {
+			log.Info().Err(err).Msg("Error reading config file")
+			if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
+				return err
+			}
+		}
+
+		// Credits to https://carolynvanslyck.com/blog/2020/08/sting-of-the-viper/
+		cmd.Flags().VisitAll(func(f *pflag.Flag) {
+			if !f.Changed && viper.IsSet(f.Name) {
+				val := viper.Get(f.Name)
+				cmd.Flags().Set(f.Name, fmt.Sprintf("%v", val))
+			}
+		})
+
+		return nil
+	},
+	Run: Execute,
+}
+
+func Execute(cmd *cobra.Command, args []string) {
+	logLevel, err := zerolog.ParseLevel(LogLevel)
 	if err != nil {
 		log.Fatal().Err(err).Msg("Could not parse log level")
 	}
 
 	zerolog.SetGlobalLevel(logLevel)
 
-	bot, err = telegramBot.NewBot(telegramBot.Settings{
-		Token:  *TelegramToken,
-		Poller: &telegramBot.LongPoller{Timeout: 10 * time.Second},
-	})
-
-	if err != nil {
-		log.Fatal().Err(err).Msg("Could not create Telegram bot")
-		return
-	}
-
-	if *ValidatorPrefixFlag == "" {
-		ValidatorPrefix = *PrefixFlag + "valoper"
-	} else {
-		ValidatorPrefix = *ValidatorPrefixFlag
-	}
-
-	if *ValidatorPubkeyPrefixFlag == "" {
-		ValidatorPubkeyPrefix = *PrefixFlag + "valoperpub"
-	} else {
-		ValidatorPubkeyPrefix = *ValidatorPubkeyPrefixFlag
-	}
-
-	if *ConsensusNodePrefixFlag == "" {
-		ConsensusNodePrefix = *PrefixFlag + "valcons"
-	} else {
-		ConsensusNodePrefix = *ConsensusNodePrefixFlag
-	}
-
-	if *ConsensusNodePubkeyPrefixFlag == "" {
-		ConsensusNodePubkeyPrefix = *PrefixFlag + "valconspub"
-	} else {
-		ConsensusNodePubkeyPrefix = *ConsensusNodePrefixFlag
-	}
+	validatorsToMonitor = args
 
 	config := sdk.GetConfig()
 	config.SetBech32PrefixForValidator(ValidatorPrefix, ValidatorPubkeyPrefix)
@@ -108,11 +103,11 @@ func main() {
 	config.Seal()
 
 	log.Info().
-		Str("--node", *NodeAddress).
-		Str("--log-level", *LogLevel).
-		Int("--interval", *Interval).
-		Int64("--threshold", *Threshold).
-		Uint64("--limit", *Limit).
+		Str("--node", NodeAddress).
+		Str("--log-level", LogLevel).
+		Int("--interval", Interval).
+		Int64("--threshold", Threshold).
+		Uint64("--limit", Limit).
 		Str("--bech-validator-prefix", ValidatorPrefix).
 		Str("--bech-validator-pubkey-prefix", ValidatorPubkeyPrefix).
 		Str("--bech-consensus-node-prefix", ConsensusNodePrefix).
@@ -127,8 +122,18 @@ func main() {
 			Msg("Monitoring specific validators")
 	}
 
+	bot, err = telegramBot.NewBot(telegramBot.Settings{
+		Token:  TelegramToken,
+		Poller: &telegramBot.LongPoller{Timeout: 10 * time.Second},
+	})
+
+	if err != nil {
+		log.Fatal().Err(err).Msg("Could not create Telegram bot")
+		return
+	}
+
 	grpcConn, err := grpc.Dial(
-		*NodeAddress,
+		NodeAddress,
 		grpc.WithInsecure(),
 	)
 	if err != nil {
@@ -139,7 +144,7 @@ func main() {
 
 	for {
 		checkValidators(grpcConn)
-		time.Sleep(time.Duration(*Interval) * time.Second)
+		time.Sleep(time.Duration(Interval) * time.Second)
 	}
 }
 
@@ -152,7 +157,7 @@ func checkValidators(grpcConn *grpc.ClientConn) {
 		context.Background(),
 		&slashingtypes.QuerySigningInfosRequest{
 			Pagination: &querytypes.PageRequest{
-				Limit: *Limit,
+				Limit: Limit,
 			},
 		},
 	)
@@ -167,7 +172,7 @@ func checkValidators(grpcConn *grpc.ClientConn) {
 		context.Background(),
 		&stakingtypes.QueryValidatorsRequest{
 			Pagination: &querytypes.PageRequest{
-				Limit: *Limit,
+				Limit: Limit,
 			},
 		},
 	)
@@ -241,7 +246,7 @@ func checkValidators(grpcConn *grpc.ClientConn) {
 
 			validatorLink = fmt.Sprintf(
 				"<a href=\"https://www.mintscan.io/%s/validators/%s\">%s</a>",
-				*MintscanPrefix,
+				MintscanPrefix,
 				validator.OperatorAddress,
 				validator.Description.Moniker,
 			)
@@ -258,7 +263,7 @@ func checkValidators(grpcConn *grpc.ClientConn) {
 			validatorLink = fmt.Sprintf("validator with key <pre>%s</pre>", signingInfo.Address)
 		}
 
-		if current <= *Threshold && previous <= *Threshold {
+		if current <= Threshold && previous <= Threshold {
 			missedBlocksBelowThreshold += 1
 			continue
 		}
@@ -281,19 +286,19 @@ func checkValidators(grpcConn *grpc.ClientConn) {
 		// 5) previous state > threshold, current state > threshold, diff < 0 - window is moving
 		// 6) previous state > threshold, current state < threshold - window moved, validator is back to normal
 
-		if current > *Threshold && previous <= *Threshold {
+		if current > Threshold && previous <= Threshold {
 			// 2
 			emoji = "🚨"
 			status = "is missing blocks"
 			log.Debug().Msg("---- Validator started missing blocks")
 			missedBlocksIncreased += 1
-		} else if current > *Threshold && previous > *Threshold && diff > 0 {
+		} else if current > Threshold && previous > Threshold && diff > 0 {
 			// 3
 			emoji = "🔴"
 			status = "is missing blocks"
 			log.Debug().Msg("---- Validator is still missing blocks")
 			missedBlocksIncreased += 1
-		} else if current > *Threshold && previous > *Threshold && diff == 0 {
+		} else if current > Threshold && previous > Threshold && diff == 0 {
 			// 4
 			// This is where it gets crazy: we need to check not the previous state,
 			// but the one before it, to see if we've sent any notifications redarding that.
@@ -325,12 +330,12 @@ func checkValidators(grpcConn *grpc.ClientConn) {
 
 			emoji = "🟡"
 			status = "stopped missing blocks"
-		} else if current > *Threshold && previous > *Threshold && diff < 0 {
+		} else if current > Threshold && previous > Threshold && diff < 0 {
 			// 5
 			log.Debug().Msg("---- Window is moving, diff is negative")
 			missedBlocksDecreased += 1
 			continue
-		} else if current <= *Threshold && previous > *Threshold && diff < 0 {
+		} else if current <= Threshold && previous > Threshold && diff < 0 {
 			missedBlocksDecreased += 1
 			// 6
 			emoji = "🟢"
@@ -361,7 +366,7 @@ func checkValidators(grpcConn *grpc.ClientConn) {
 
 	if tgMessage != "" {
 		log.Debug().Str("msg", sb.String()).Msg("Formatted string")
-		_, err = bot.Send(&telegramBot.User{ID: *TelegramChat}, sb.String(), telegramBot.ModeHTML)
+		_, err = bot.Send(&telegramBot.User{ID: TelegramChat}, sb.String(), telegramBot.ModeHTML)
 		if err != nil {
 			log.Error().
 				Err(err).
@@ -412,4 +417,29 @@ func isValidatorMonitored(address string) bool {
 	}
 
 	return false
+}
+
+func main() {
+	rootCmd.PersistentFlags().StringVar(&ConfigPath, "config", "", "Config file path")
+	rootCmd.PersistentFlags().StringVar(&NodeAddress, "node", "localhost:9090", "RPC node address")
+	rootCmd.PersistentFlags().StringVar(&LogLevel, "log-level", "info", "Logging level")
+	rootCmd.PersistentFlags().StringVar(&TelegramToken, "telegram-token", "", "Telegram bot token")
+	rootCmd.PersistentFlags().IntVar(&TelegramChat, "telegram-chat", 0, "Telegram chat or user ID")
+	rootCmd.PersistentFlags().IntVar(&Interval, "interval", 120, "Interval between two checks, in seconds")
+	rootCmd.PersistentFlags().Int64Var(&Threshold, "threshold", 0, "Threshold of missed blocks")
+	rootCmd.PersistentFlags().Uint64Var(&Limit, "limit", 1000, "gRPC query pagination limit")
+	rootCmd.PersistentFlags().StringVar(&MintscanPrefix, "mintscan", "persistence", "Prefix for mintscan links like https://mintscan.io/{prefix}")
+
+	// some networks, like Iris, have the different prefixes for address, validator and consensus node
+	rootCmd.PersistentFlags().StringVar(&Prefix, "bech-prefix", "persistence", "Bech32 global prefix")
+	rootCmd.PersistentFlags().StringVar(&ValidatorPrefix, "bech-validator-prefix", Prefix+"valoper", "Bech32 validator prefix")
+	rootCmd.PersistentFlags().StringVar(&ValidatorPubkeyPrefix, "bech-validator-pubkey-prefix", Prefix+"valoperpub", "Bech32 pubkey validator prefix")
+	rootCmd.PersistentFlags().StringVar(&ConsensusNodePrefix, "bech-consensus-node-prefix", Prefix+"valcons", "Bech32 consensus node prefix")
+	rootCmd.PersistentFlags().StringVar(&ConsensusNodePubkeyPrefix, "bech-consensus-node-pubkey-prefix", Prefix+"valconspub", "Bech32 pubkey consensus node prefix")
+
+	viper.BindPFlag("bech-consensus-node-pubkey-prefix", rootCmd.PersistentFlags().Lookup("bech-consensus-node-pubkey-prefix"))
+
+	if err := rootCmd.Execute(); err != nil {
+		log.Fatal().Err(err).Msg("Could not start application")
+	}
 }

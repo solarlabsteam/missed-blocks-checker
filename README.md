@@ -86,8 +86,6 @@ You can pass the artuments to the executable file to configure it. Here is the p
 - `--mintscan-prefix` - This bot generates links to Mintscan for validators, using this prefix. Links have the following format: `https://mintscan.io/<mintscan-prefix>/validator/<validator ID>`. Defaults to `persistence`.
 - `--interval` - Interval between the two checks, in seconds. Defaults to 120
 
-
-
 You can also specify custom Bech32 prefixes for wallets, validators, consensus nodes, and their pubkeys by using the following params:
 - `--bech-validator-prefix`
 - `--bech-validator-pubkey-prefix`
@@ -100,7 +98,9 @@ By default, if not specified, it defaults to the next values (as it works this w
 - `--bech-consensus-node-prefix` = `--bech-prefix` + "valcons"
 - `--bech-consensus-node-pubkey-prefix` = `--bech-prefix` + "valconspub"
 
-An example of the network where you have to specify all the prefixes manually is Iris, check out the flags example below.
+An example of the network where you have to specify all the prefixes manually is Iris.
+
+Additionally, you can pass a `--config` flag with a path to your config file (I use .toml, but anything supported by [viper](https://github.com/spf13/viper) should work).
 
 
 ## Which networks this is guaranteed to work?
