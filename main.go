@@ -189,6 +189,7 @@ func checkValidators(grpcConn *grpc.ClientConn) {
 	missedBlocksIncreased := 0
 	missedBlocksDecreased := 0
 	missedBlocksNotChanged := 0
+	missedBlocksBelowThreshold := 0
 
 	log.Trace().Msg("Processing validators")
 	for _, signingInfo := range signingInfos.Info {
@@ -216,6 +217,7 @@ func checkValidators(grpcConn *grpc.ClientConn) {
 		diff := current - previous
 
 		if current <= *Threshold && previous <= *Threshold {
+			missedBlocksBelowThreshold += 1
 			continue
 		}
 
@@ -325,6 +327,7 @@ func checkValidators(grpcConn *grpc.ClientConn) {
 		Int("missedBlocksIncreased", missedBlocksIncreased).
 		Int("missedBlocksNotChanged", missedBlocksNotChanged).
 		Int("missedBlocksDecreased", missedBlocksDecreased).
+		Int("missedBlocksBelowThreshold", missedBlocksBelowThreshold).
 		Msg("Validators diff")
 
 	tgMessage := sb.String()
