@@ -55,8 +55,11 @@ var bot *telegramBot.Bot
 var encCfg = simapp.MakeTestEncodingConfig()
 var interfaceRegistry = encCfg.InterfaceRegistry
 
+var validatorsToMonitor []string
+
 func main() {
 	flag.Parse()
+	validatorsToMonitor = flag.Args()
 
 	logLevel, err := zerolog.ParseLevel(*LogLevel)
 	if err != nil {
@@ -115,6 +118,14 @@ func main() {
 		Str("--bech-consensus-node-prefix", ConsensusNodePrefix).
 		Str("--bech-consensus-node-pubkey-prefix", ConsensusNodePubkeyPrefix).
 		Msg("Started with following parameters")
+
+	if len(validatorsToMonitor) == 0 {
+		log.Info().Msg("Monitoring all validators")
+	} else {
+		log.Info().
+			Strs("validators", validatorsToMonitor).
+			Msg("Monitoring specific validators")
+	}
 
 	grpcConn, err := grpc.Dial(
 		*NodeAddress,
@@ -179,7 +190,6 @@ func checkValidators(grpcConn *grpc.ClientConn) {
 
 	if previousInfos == nil {
 		log.Info().Msg("Previous infos is empty, first start. No checking difference")
-		beforePreviousInfos = previousInfos
 		previousInfos = signingInfos.Info
 		return
 	}
@@ -191,8 +201,9 @@ func checkValidators(grpcConn *grpc.ClientConn) {
 	missedBlocksNotChanged := 0
 	missedBlocksBelowThreshold := 0
 
-	log.Trace().Msg("Processing validators")
+	log.Debug().Msg("Processing validators")
 	for _, signingInfo := range signingInfos.Info {
+		log.Debug().Str("pubkey", signingInfo.Address).Msg("-- Validator info")
 		var previousInfo slashingtypes.ValidatorSigningInfo
 		previousInfoFound := false
 		for _, previousInfoIterated := range previousInfos {
@@ -204,7 +215,7 @@ func checkValidators(grpcConn *grpc.ClientConn) {
 		}
 
 		if !previousInfoFound {
-			log.Debug().Str("address", signingInfo.Address).Msg("-- Could not find previous info")
+			log.Debug().Str("address", signingInfo.Address).Msg("---- Could not find previous info")
 			continue
 		}
 
@@ -216,15 +227,18 @@ func checkValidators(grpcConn *grpc.ClientConn) {
 		current := signingInfo.MissedBlocksCounter
 		diff := current - previous
 
-		if current <= *Threshold && previous <= *Threshold {
-			missedBlocksBelowThreshold += 1
-			continue
-		}
-
 		var validatorLink string
 
 		// somehow not all the validators info is returned
-		if validator, found := findValidator(signingInfo.Address); found {
+		validator, found := findValidator(signingInfo.Address)
+		if found {
+			log.Debug().Str("address", validator.OperatorAddress).Msg("---- Found validator for pubkey")
+
+			if !isValidatorMonitored(validator.OperatorAddress) {
+				log.Debug().Msg("---- Monitoring specific validators - skipping.")
+				continue
+			}
+
 			validatorLink = fmt.Sprintf(
 				"<a href=\"https://www.mintscan.io/%s/validators/%s\">%s</a>",
 				*MintscanPrefix,
@@ -232,8 +246,21 @@ func checkValidators(grpcConn *grpc.ClientConn) {
 				validator.Description.Moniker,
 			)
 		} else {
-			log.Debug().Str("address", signingInfo.Address).Msg("-- Could not find validator")
+			// if monitoring all validators, we want to be notified also about
+			// those where we cannot get the validator info, if specific ones - we want
+			// to skip these
+			if len(validatorsToMonitor) != 0 {
+				log.Debug().Msg("---- No pubkey info, monitoring specific validators - skipping.")
+				continue
+			}
+
+			log.Debug().Str("address", signingInfo.Address).Msg("---- Could not find validator for pubkey")
 			validatorLink = fmt.Sprintf("validator with key <pre>%s</pre>", signingInfo.Address)
+		}
+
+		if current <= *Threshold && previous <= *Threshold {
+			missedBlocksBelowThreshold += 1
+			continue
 		}
 
 		log.Debug().
@@ -241,7 +268,7 @@ func checkValidators(grpcConn *grpc.ClientConn) {
 			Int64("missedBlocks", diff).
 			Int64("before", previous).
 			Int64("after", current).
-			Msg("-- Validator diff with previous state")
+			Msg("---- Validator diff with previous state")
 
 		var emoji string
 		var status string
@@ -257,14 +284,14 @@ func checkValidators(grpcConn *grpc.ClientConn) {
 		if current > *Threshold && previous <= *Threshold {
 			// 2
 			emoji = "🚨"
-			status = "started missing blocks"
+			status = "is missing blocks"
 			log.Debug().Msg("---- Validator started missing blocks")
 			missedBlocksIncreased += 1
 		} else if current > *Threshold && previous > *Threshold && diff > 0 {
 			// 3
 			emoji = "🔴"
-			status = "is still missing blocks"
-			log.Debug().Msg("---- is still missing blocks")
+			status = "is missing blocks"
+			log.Debug().Msg("---- Validator is still missing blocks")
 			missedBlocksIncreased += 1
 		} else if current > *Threshold && previous > *Threshold && diff == 0 {
 			// 4
@@ -370,4 +397,19 @@ func findValidator(address string) (stakingtypes.Validator, bool) {
 	}
 
 	return stakingtypes.Validator{}, false
+}
+
+func isValidatorMonitored(address string) bool {
+	// If no args passed, we want to be notified about all validators.
+	if len(validatorsToMonitor) == 0 {
+		return true
+	}
+
+	for _, monitoredValidatorAddr := range validatorsToMonitor {
+		if monitoredValidatorAddr == address {
+			return true
+		}
+	}
+
+	return false
 }
