@@ -233,7 +233,7 @@ func checkValidators(grpcConn *grpc.ClientConn) {
 			)
 		} else {
 			log.Debug().Str("address", signingInfo.Address).Msg("-- Could not find validator")
-			validatorLink = fmt.Sprintf("validator with key %s", signingInfo.Address)
+			validatorLink = fmt.Sprintf("validator with key <pre>%s</pre>", signingInfo.Address)
 		}
 
 		log.Debug().
@@ -313,7 +313,7 @@ func checkValidators(grpcConn *grpc.ClientConn) {
 		}
 
 		sb.WriteString(fmt.Sprintf(
-			"%s <strong>%s</strong> %s: %d -> %d\n",
+			"%s <strong>%s %s</strong>: %d -> %d\n\n",
 			emoji,
 			validatorLink,
 			status,
