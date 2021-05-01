@@ -40,8 +40,6 @@ var (
 	ValidatorPubkeyPrefix     string
 	ConsensusNodePrefix       string
 	ConsensusNodePubkeyPrefix string
-
-	envPrefix string = "MISSED_BLOCKS_COUNTER"
 )
 
 var log = zerolog.New(zerolog.ConsoleWriter{Out: os.Stdout}).With().Timestamp().Logger()
@@ -437,7 +435,8 @@ func main() {
 	rootCmd.PersistentFlags().StringVar(&ConsensusNodePrefix, "bech-consensus-node-prefix", Prefix+"valcons", "Bech32 consensus node prefix")
 	rootCmd.PersistentFlags().StringVar(&ConsensusNodePubkeyPrefix, "bech-consensus-node-pubkey-prefix", Prefix+"valconspub", "Bech32 pubkey consensus node prefix")
 
-	viper.BindPFlag("bech-consensus-node-pubkey-prefix", rootCmd.PersistentFlags().Lookup("bech-consensus-node-pubkey-prefix"))
+	rootCmd.MarkPersistentFlagRequired("telegram-token")
+	rootCmd.MarkPersistentFlagRequired("telegram-chat")
 
 	if err := rootCmd.Execute(); err != nil {
 		log.Fatal().Err(err).Msg("Could not start application")
