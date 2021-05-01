@@ -76,7 +76,9 @@ var rootCmd = &cobra.Command{
 		cmd.Flags().VisitAll(func(f *pflag.Flag) {
 			if !f.Changed && viper.IsSet(f.Name) {
 				val := viper.Get(f.Name)
-				cmd.Flags().Set(f.Name, fmt.Sprintf("%v", val))
+				if err := cmd.Flags().Set(f.Name, fmt.Sprintf("%v", val)); err != nil {
+					log.Fatal().Err(err).Msg("Could not set flag")
+				}
 			}
 		})
 
@@ -435,8 +437,13 @@ func main() {
 	rootCmd.PersistentFlags().StringVar(&ConsensusNodePrefix, "bech-consensus-node-prefix", Prefix+"valcons", "Bech32 consensus node prefix")
 	rootCmd.PersistentFlags().StringVar(&ConsensusNodePubkeyPrefix, "bech-consensus-node-pubkey-prefix", Prefix+"valconspub", "Bech32 pubkey consensus node prefix")
 
-	rootCmd.MarkPersistentFlagRequired("telegram-token")
-	rootCmd.MarkPersistentFlagRequired("telegram-chat")
+	if err := rootCmd.MarkPersistentFlagRequired("telegram-token"); err != nil {
+		log.Fatal().Err(err).Msg("Could not mark flag as required")
+	}
+
+	if err := rootCmd.MarkPersistentFlagRequired("telegram-chat"); err != nil {
+		log.Fatal().Err(err).Msg("Could not mark flag as required")
+	}
 
 	if err := rootCmd.Execute(); err != nil {
 		log.Fatal().Err(err).Msg("Could not start application")
