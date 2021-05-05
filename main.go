@@ -85,6 +85,8 @@ var rootCmd = &cobra.Command{
 			}
 		})
 
+		setBechPrefixes(cmd)
+
 		return nil
 	},
 	Run: Execute,
@@ -388,6 +390,32 @@ func checkValidators(grpcConn *grpc.ClientConn) {
 	previousInfos = signingInfos.Info
 }
 
+func setBechPrefixes(cmd *cobra.Command) {
+	if flag, err := cmd.Flags().GetString("bech-validator-prefix"); flag != "" && err == nil {
+		ValidatorPrefix = flag
+	} else {
+		ValidatorPrefix = Prefix + "valoper"
+	}
+
+	if flag, err := cmd.Flags().GetString("bech-validator-pubkey-prefix"); flag != "" && err == nil {
+		ValidatorPubkeyPrefix = flag
+	} else {
+		ValidatorPubkeyPrefix = Prefix + "valoperpub"
+	}
+
+	if flag, err := cmd.Flags().GetString("bech-consensus-node-prefix"); flag != "" && err == nil {
+		ConsensusNodePrefix = flag
+	} else {
+		ConsensusNodePrefix = Prefix + "valcons"
+	}
+
+	if flag, err := cmd.Flags().GetString("bech-consensus-node-pubkey-prefix"); flag != "" && err == nil {
+		ConsensusNodePubkeyPrefix = flag
+	} else {
+		ConsensusNodePubkeyPrefix = Prefix + "valconspub"
+	}
+}
+
 func findValidator(address string) (stakingtypes.Validator, bool) {
 	for _, validatorIterated := range validators {
 		err := validatorIterated.UnpackInterfaces(interfaceRegistry)
@@ -441,10 +469,10 @@ func main() {
 
 	// some networks, like Iris, have the different prefixes for address, validator and consensus node
 	rootCmd.PersistentFlags().StringVar(&Prefix, "bech-prefix", "persistence", "Bech32 global prefix")
-	rootCmd.PersistentFlags().StringVar(&ValidatorPrefix, "bech-validator-prefix", Prefix+"valoper", "Bech32 validator prefix")
-	rootCmd.PersistentFlags().StringVar(&ValidatorPubkeyPrefix, "bech-validator-pubkey-prefix", Prefix+"valoperpub", "Bech32 pubkey validator prefix")
-	rootCmd.PersistentFlags().StringVar(&ConsensusNodePrefix, "bech-consensus-node-prefix", Prefix+"valcons", "Bech32 consensus node prefix")
-	rootCmd.PersistentFlags().StringVar(&ConsensusNodePubkeyPrefix, "bech-consensus-node-pubkey-prefix", Prefix+"valconspub", "Bech32 pubkey consensus node prefix")
+	rootCmd.PersistentFlags().StringVar(&ValidatorPrefix, "bech-validator-prefix", "", "Bech32 validator prefix")
+	rootCmd.PersistentFlags().StringVar(&ValidatorPubkeyPrefix, "bech-validator-pubkey-prefix", "", "Bech32 pubkey validator prefix")
+	rootCmd.PersistentFlags().StringVar(&ConsensusNodePrefix, "bech-consensus-node-prefix", "", "Bech32 consensus node prefix")
+	rootCmd.PersistentFlags().StringVar(&ConsensusNodePubkeyPrefix, "bech-consensus-node-pubkey-prefix", "", "Bech32 pubkey consensus node prefix")
 
 	if err := rootCmd.MarkPersistentFlagRequired("telegram-token"); err != nil {
 		log.Fatal().Err(err).Msg("Could not mark flag as required")
