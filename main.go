@@ -61,8 +61,11 @@ var rootCmd = &cobra.Command{
 	Long: "Tool to monitor missed blocks for Cosmos-chain validators",
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 		if ConfigPath == "" {
+			log.Trace().Msg("No config file provided, skipping")
 			return nil
 		}
+
+		log.Trace().Msg("Config file provided")
 
 		viper.SetConfigFile(ConfigPath)
 		if err := viper.ReadInConfig(); err != nil {
@@ -129,7 +132,6 @@ func Execute(cmd *cobra.Command, args []string) {
 
 	if err != nil {
 		log.Fatal().Err(err).Msg("Could not create Telegram bot")
-		return
 	}
 
 	grpcConn, err := grpc.Dial(
@@ -137,7 +139,7 @@ func Execute(cmd *cobra.Command, args []string) {
 		grpc.WithInsecure(),
 	)
 	if err != nil {
-		panic(err)
+		log.Fatal().Err(err).Msg("Could not establish gRPC connection")
 	}
 
 	defer grpcConn.Close()
@@ -320,12 +322,19 @@ func checkValidators(grpcConn *grpc.ClientConn) {
 				continue
 			}
 
-			// Now, if current diff is zero, but diff between previous and before previous is not zero,
+			// Now, if current diff is zero, but diff between previous and before previous is above zero,
 			// that means we haven't sent a notification so far, and should do it.
+			// If previous diff is negative, that means the window has moved, and we won't need to notify.
+			// If previous diff is zero, everything is stable, no need to send notifications as well.
 			previousDiff := previousInfo.MissedBlocksCounter - beforePreviousInfo.MissedBlocksCounter
 			if previousDiff == 0 {
 				log.Debug().Msg("---- Previous diff == 0, notification already sent.")
 				continue
+			} else if previousDiff < 0 {
+				log.Debug().Msg("---- Previous diff < 0, not sending notification.")
+				continue
+			} else {
+				log.Debug().Msg("---- Previous diff > 0, sending notification.")
 			}
 
 			emoji = "🟡"
@@ -428,7 +437,7 @@ func main() {
 	rootCmd.PersistentFlags().IntVar(&Interval, "interval", 120, "Interval between two checks, in seconds")
 	rootCmd.PersistentFlags().Int64Var(&Threshold, "threshold", 0, "Threshold of missed blocks")
 	rootCmd.PersistentFlags().Uint64Var(&Limit, "limit", 1000, "gRPC query pagination limit")
-	rootCmd.PersistentFlags().StringVar(&MintscanPrefix, "mintscan", "persistence", "Prefix for mintscan links like https://mintscan.io/{prefix}")
+	rootCmd.PersistentFlags().StringVar(&MintscanPrefix, "mintscan-prefix", "persistence", "Prefix for mintscan links like https://mintscan.io/{prefix}")
 
 	// some networks, like Iris, have the different prefixes for address, validator and consensus node
 	rootCmd.PersistentFlags().StringVar(&Prefix, "bech-prefix", "persistence", "Bech32 global prefix")
