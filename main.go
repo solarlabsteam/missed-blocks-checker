@@ -62,6 +62,7 @@ var rootCmd = &cobra.Command{
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 		if ConfigPath == "" {
 			log.Trace().Msg("No config file provided, skipping")
+			setBechPrefixes(cmd)
 			return nil
 		}
 
@@ -473,6 +474,8 @@ func main() {
 	rootCmd.PersistentFlags().StringVar(&ValidatorPubkeyPrefix, "bech-validator-pubkey-prefix", "", "Bech32 pubkey validator prefix")
 	rootCmd.PersistentFlags().StringVar(&ConsensusNodePrefix, "bech-consensus-node-prefix", "", "Bech32 consensus node prefix")
 	rootCmd.PersistentFlags().StringVar(&ConsensusNodePubkeyPrefix, "bech-consensus-node-pubkey-prefix", "", "Bech32 pubkey consensus node prefix")
+
+	zerolog.SetGlobalLevel(zerolog.InfoLevel)
 
 	if err := rootCmd.MarkPersistentFlagRequired("telegram-token"); err != nil {
 		log.Fatal().Err(err).Msg("Could not mark flag as required")

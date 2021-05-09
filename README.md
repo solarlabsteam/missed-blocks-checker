@@ -15,8 +15,7 @@ After that, you need to download the latest release from [the releases page](htt
 
 ```sh
 wget <the link from the releases page>
-tar xvfz missed-blocks-checker-*.*-amd64.tar.gz
-cd missed-blocks-checker-*.*-amd64.tar.gz
+tar xvfz missed-blocks-checker_*
 ./missed-blocks-checker --telegram-token <bot token> --telegram-chat <user or chat ID from the previous step>
 ```
 
@@ -65,7 +64,7 @@ sudo systemctl status missed-blocks-checker # validate it's running
 If you need to, you can also see the logs of the process:
 
 ```sh
-sudo journalctl -u missed-blocks-checker -f
+sudo journalctl -u missed-blocks-checker -f --output cat
 ```
 
 ## How does it work?
