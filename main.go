@@ -357,7 +357,7 @@ func checkValidators(grpcConn *grpc.ClientConn) {
 		}
 
 		sb.WriteString(fmt.Sprintf(
-			"%s <strong>%s %s</strong>: %d -> %d\n\n",
+			"%s <strong>%s %s</strong>: %d -> %d\n",
 			emoji,
 			validatorLink,
 			status,
