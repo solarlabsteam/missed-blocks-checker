@@ -26,12 +26,15 @@ var (
 	ConfigPath     string
 	NodeAddress    string
 	LogLevel       string
-	TelegramToken  string
-	TelegramChat   int
 	Interval       int
 	Threshold      int64
 	Limit          uint64
 	MintscanPrefix string
+
+	TelegramToken string
+	TelegramChat  int
+	SlackToken    string
+	SlackChat     string
 
 	Prefix                    string
 	ValidatorPrefix           string
@@ -146,6 +149,10 @@ func Execute(cmd *cobra.Command, args []string) {
 		&TelegramReporter{
 			TelegramToken: TelegramToken,
 			TelegramChat:  TelegramChat,
+		},
+		&SlackReporter{
+			SlackToken: SlackToken,
+			SlackChat:  SlackChat,
 		},
 	}
 
@@ -467,12 +474,15 @@ func main() {
 	rootCmd.PersistentFlags().StringVar(&ConfigPath, "config", "", "Config file path")
 	rootCmd.PersistentFlags().StringVar(&NodeAddress, "node", "localhost:9090", "RPC node address")
 	rootCmd.PersistentFlags().StringVar(&LogLevel, "log-level", "info", "Logging level")
-	rootCmd.PersistentFlags().StringVar(&TelegramToken, "telegram-token", "", "Telegram bot token")
-	rootCmd.PersistentFlags().IntVar(&TelegramChat, "telegram-chat", 0, "Telegram chat or user ID")
 	rootCmd.PersistentFlags().IntVar(&Interval, "interval", 120, "Interval between two checks, in seconds")
 	rootCmd.PersistentFlags().Int64Var(&Threshold, "threshold", 0, "Threshold of missed blocks")
 	rootCmd.PersistentFlags().Uint64Var(&Limit, "limit", 1000, "gRPC query pagination limit")
 	rootCmd.PersistentFlags().StringVar(&MintscanPrefix, "mintscan-prefix", "persistence", "Prefix for mintscan links like https://mintscan.io/{prefix}")
+
+	rootCmd.PersistentFlags().StringVar(&TelegramToken, "telegram-token", "", "Telegram bot token")
+	rootCmd.PersistentFlags().IntVar(&TelegramChat, "telegram-chat", 0, "Telegram chat or user ID")
+	rootCmd.PersistentFlags().StringVar(&SlackToken, "slack-token", "", "Slack bot token")
+	rootCmd.PersistentFlags().StringVar(&SlackChat, "slack-chat", "", "Slack chat or user ID")
 
 	// some networks, like Iris, have the different prefixes for address, validator and consensus node
 	rootCmd.PersistentFlags().StringVar(&Prefix, "bech-prefix", "persistence", "Bech32 global prefix")

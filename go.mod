@@ -7,6 +7,7 @@ replace github.com/gogo/protobuf => github.com/regen-network/protobuf v1.3.3-alp
 require (
 	github.com/cosmos/cosmos-sdk v0.42.4
 	github.com/rs/zerolog v1.21.0
+	github.com/slack-go/slack v0.9.1
 	github.com/spf13/cobra v1.1.1
 	github.com/spf13/pflag v1.0.5
 	github.com/spf13/viper v1.7.1
