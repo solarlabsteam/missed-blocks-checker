@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"strings"
 	"time"
 
 	"google.golang.org/grpc"
@@ -17,7 +16,6 @@ import (
 	stakingtypes "github.com/cosmos/cosmos-sdk/x/staking/types"
 
 	"github.com/rs/zerolog"
-	telegramBot "gopkg.in/tucnak/telebot.v2"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -40,7 +38,11 @@ var (
 	ValidatorPubkeyPrefix     string
 	ConsensusNodePrefix       string
 	ConsensusNodePubkeyPrefix string
+
+	grpcConn *grpc.ClientConn
 )
+
+var reporters []Reporter
 
 var log = zerolog.New(zerolog.ConsoleWriter{Out: os.Stdout}).With().Timestamp().Logger()
 
@@ -48,8 +50,6 @@ var beforePreviousInfos []slashingtypes.ValidatorSigningInfo
 var previousInfos []slashingtypes.ValidatorSigningInfo
 
 var validators []stakingtypes.Validator
-
-var bot *telegramBot.Bot
 
 var encCfg = simapp.MakeTestEncodingConfig()
 var interfaceRegistry = encCfg.InterfaceRegistry
@@ -128,16 +128,11 @@ func Execute(cmd *cobra.Command, args []string) {
 			Msg("Monitoring specific validators")
 	}
 
-	bot, err = telegramBot.NewBot(telegramBot.Settings{
-		Token:  TelegramToken,
-		Poller: &telegramBot.LongPoller{Timeout: 10 * time.Second},
-	})
-
 	if err != nil {
 		log.Fatal().Err(err).Msg("Could not create Telegram bot")
 	}
 
-	grpcConn, err := grpc.Dial(
+	grpcConn, err = grpc.Dial(
 		NodeAddress,
 		grpc.WithInsecure(),
 	)
@@ -147,13 +142,45 @@ func Execute(cmd *cobra.Command, args []string) {
 
 	defer grpcConn.Close()
 
+	reporters = []Reporter{
+		&TelegramReporter{
+			TelegramToken: TelegramToken,
+			TelegramChat:  TelegramChat,
+		},
+	}
+
+	for _, reporter := range reporters {
+		log.Info().Str("name", reporter.Name()).Msg("Init reporter")
+		reporter.Init()
+	}
+
 	for {
-		checkValidators(grpcConn)
+		report := generateReport()
+		if report == nil || len(report.Entries) == 0 {
+			log.Info().Msg("Report is empty, not sending.")
+			time.Sleep(time.Duration(Interval) * time.Second)
+			continue
+		}
+
+		for _, reporter := range reporters {
+			if !reporter.Enabled() {
+				log.Debug().Str("name", reporter.Name()).Msg("Reporter is disabled.")
+				continue
+			}
+
+			log.Info().Str("name", reporter.Name()).Msg("Sending a report to reporter...")
+			if err := reporter.SendReport(*report); err != nil {
+				log.Error().Err(err).Str("name", reporter.Name()).Msg("Could not send message")
+			}
+		}
+
 		time.Sleep(time.Duration(Interval) * time.Second)
 	}
 }
 
-func checkValidators(grpcConn *grpc.ClientConn) {
+func generateReport() *Report {
+	report := Report{Entries: []ReportEntry{}}
+
 	log.Trace().Msg("=============== Request start =================")
 	defer log.Trace().Msg("=============== Request end =================")
 
@@ -169,7 +196,7 @@ func checkValidators(grpcConn *grpc.ClientConn) {
 
 	if err != nil {
 		log.Error().Err(err).Msg("Could not query for signing info")
-		return
+		return nil
 	}
 
 	stakingClient := stakingtypes.NewQueryClient(grpcConn)
@@ -184,7 +211,7 @@ func checkValidators(grpcConn *grpc.ClientConn) {
 
 	if err != nil {
 		log.Error().Err(err).Msg("Could not query for validators")
-		return
+		return nil
 	}
 
 	validators = validatorsResult.Validators
@@ -201,10 +228,8 @@ func checkValidators(grpcConn *grpc.ClientConn) {
 	if previousInfos == nil {
 		log.Info().Msg("Previous infos is empty, first start. No checking difference")
 		previousInfos = signingInfos.Info
-		return
+		return nil
 	}
-
-	var sb strings.Builder
 
 	missedBlocksIncreased := 0
 	missedBlocksDecreased := 0
@@ -237,7 +262,12 @@ func checkValidators(grpcConn *grpc.ClientConn) {
 		current := signingInfo.MissedBlocksCounter
 		diff := current - previous
 
-		var validatorLink string
+		var (
+			ValidatorAddress string
+			ValidatorMoniker string
+			Pubkey           string = signingInfo.Address
+			Direction        Direction
+		)
 
 		// somehow not all the validators info is returned
 		validator, found := findValidator(signingInfo.Address)
@@ -249,12 +279,8 @@ func checkValidators(grpcConn *grpc.ClientConn) {
 				continue
 			}
 
-			validatorLink = fmt.Sprintf(
-				"<a href=\"https://www.mintscan.io/%s/validators/%s\">%s</a>",
-				MintscanPrefix,
-				validator.OperatorAddress,
-				validator.Description.Moniker,
-			)
+			ValidatorAddress = validator.OperatorAddress
+			ValidatorMoniker = validator.Description.Moniker
 		} else {
 			// if monitoring all validators, we want to be notified also about
 			// those where we cannot get the validator info, if specific ones - we want
@@ -265,7 +291,6 @@ func checkValidators(grpcConn *grpc.ClientConn) {
 			}
 
 			log.Debug().Str("address", signingInfo.Address).Msg("---- Could not find validator for pubkey")
-			validatorLink = fmt.Sprintf("validator with key <pre>%s</pre>", signingInfo.Address)
 		}
 
 		if current <= Threshold && previous <= Threshold {
@@ -280,9 +305,6 @@ func checkValidators(grpcConn *grpc.ClientConn) {
 			Int64("after", current).
 			Msg("---- Validator diff with previous state")
 
-		var emoji string
-		var status string
-
 		// Possible cases:
 		// 1) previous state < threshold, current state < threshold - validator is not missing blocks, ignoring
 		// 2) previous state < threshold, current state > threshold - validator started missing blocks
@@ -293,14 +315,12 @@ func checkValidators(grpcConn *grpc.ClientConn) {
 
 		if current > Threshold && previous <= Threshold {
 			// 2
-			emoji = "🚨"
-			status = "is missing blocks"
+			Direction = START_MISSING_BLOCKS
 			log.Debug().Msg("---- Validator started missing blocks")
 			missedBlocksIncreased += 1
 		} else if current > Threshold && previous > Threshold && diff > 0 {
 			// 3
-			emoji = "🔴"
-			status = "is missing blocks"
+			Direction = MISSING_BLOCKS
 			log.Debug().Msg("---- Validator is still missing blocks")
 			missedBlocksIncreased += 1
 		} else if current > Threshold && previous > Threshold && diff == 0 {
@@ -340,8 +360,7 @@ func checkValidators(grpcConn *grpc.ClientConn) {
 				log.Debug().Msg("---- Previous diff > 0, sending notification.")
 			}
 
-			emoji = "🟡"
-			status = "stopped missing blocks"
+			Direction = STOPPED_MISSING_BLOCKS
 		} else if current > Threshold && previous > Threshold && diff < 0 {
 			// 5
 			log.Debug().Msg("---- Window is moving, diff is negative")
@@ -350,21 +369,19 @@ func checkValidators(grpcConn *grpc.ClientConn) {
 		} else if current <= Threshold && previous > Threshold && diff < 0 {
 			missedBlocksDecreased += 1
 			// 6
-			emoji = "🟢"
-			status = "went back to normal"
+			Direction = WENT_BACK_TO_NORMAL
 		} else {
 			log.Fatal().Msg("Unexpected state")
 		}
 
-		sb.WriteString(fmt.Sprintf(
-			"%s <strong>%s %s</strong>: %d -> %d\n",
-			emoji,
-			validatorLink,
-			status,
-			previousInfo.MissedBlocksCounter,
-			signingInfo.MissedBlocksCounter,
-		))
-
+		report.Entries = append(report.Entries, ReportEntry{
+			ValidatorAddress:    ValidatorAddress,
+			ValidatorMoniker:    ValidatorMoniker,
+			Pubkey:              Pubkey,
+			Direction:           Direction,
+			BeforeBlocksMissing: previous,
+			NowBlocksMissing:    current,
+		})
 	}
 
 	log.Info().
@@ -374,21 +391,10 @@ func checkValidators(grpcConn *grpc.ClientConn) {
 		Int("missedBlocksBelowThreshold", missedBlocksBelowThreshold).
 		Msg("Validators diff")
 
-	tgMessage := sb.String()
-
-	if tgMessage != "" {
-		log.Debug().Str("msg", sb.String()).Msg("Formatted string")
-		_, err = bot.Send(&telegramBot.User{ID: TelegramChat}, sb.String(), telegramBot.ModeHTML)
-		if err != nil {
-			log.Error().
-				Err(err).
-				Msg("Could not send Telegram message")
-			return
-		}
-	}
-
 	beforePreviousInfos = previousInfos
 	previousInfos = signingInfos.Info
+
+	return &report
 }
 
 func setBechPrefixes(cmd *cobra.Command) {
@@ -476,14 +482,6 @@ func main() {
 	rootCmd.PersistentFlags().StringVar(&ConsensusNodePubkeyPrefix, "bech-consensus-node-pubkey-prefix", "", "Bech32 pubkey consensus node prefix")
 
 	zerolog.SetGlobalLevel(zerolog.InfoLevel)
-
-	if err := rootCmd.MarkPersistentFlagRequired("telegram-token"); err != nil {
-		log.Fatal().Err(err).Msg("Could not mark flag as required")
-	}
-
-	if err := rootCmd.MarkPersistentFlagRequired("telegram-chat"); err != nil {
-		log.Fatal().Err(err).Msg("Could not mark flag as required")
-	}
 
 	if err := rootCmd.Execute(); err != nil {
 		log.Fatal().Err(err).Msg("Could not start application")
