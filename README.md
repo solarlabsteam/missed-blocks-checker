@@ -3,15 +3,11 @@
 ![Latest release](https://img.shields.io/github/v/release/solarlabsteam/missed-blocks-checker)
 [![Actions Status](https://github.com/solarlabsteam/missed-blocks-checker/workflows/test/badge.svg)](https://github.com/solarlabsteam/missed-blocks-checker/actions)
 
-missed-blocks-checker is a tool that sends a message to Telegram chat if any of the Cosmos validators starts or stops missing blocks. It queries the data from the gRPC endpoint.
+missed-blocks-checker is a tool that sends a message to configured channels if any of the Cosmos validators starts or stops missing blocks. It queries the data from the gRPC endpoint.
 
 ## How can I set it up?
 
-First of all, go to @BotFather in Telegram and create a bot. After that, there are two options:
-- you want to send messages to a user. This user should write a message to @getmyid_bot, then copy the `Your user ID` number.
-- you want to send messages to a channel. Write something to a channel, then forward it to @getmyid_bot and copy the `Forwarded from chat` number
-
-After that, you need to download the latest release from [the releases page](https://github.com/solarlabsteam/missed-blocks-checker/releases/). After that, you should unzip it and you are ready to go:
+Download the latest release from [the releases page](https://github.com/solarlabsteam/missed-blocks-checker/releases/). After that, you should unzip it and you are ready to go:
 
 ```sh
 wget <the link from the releases page>
@@ -100,6 +96,24 @@ By default, if not specified, it defaults to the next values (as it works this w
 An example of the network where you have to specify all the prefixes manually is Iris.
 
 Additionally, you can pass a `--config` flag with a path to your config file (I use .toml, but anything supported by [viper](https://github.com/spf13/viper) should work).
+
+## Notifications channels
+
+Currently this program supports the following notifications channels:
+1) Telegram
+
+Go to @BotFather in Telegram and create a bot. After that, there are two options:
+- you want to send messages to a user. This user should write a message to @getmyid_bot, then copy the `Your user ID` number. Also keep in mind that the bot won't be able to send messages unless you contact it first, so write a message to a bot before proceeding.
+- you want to send messages to a channel. Write something to a channel, then forward it to @getmyid_bot and copy the `Forwarded from chat` number. Then add the bot as an admin.
+
+
+Then run a program with `--telegram-token <token> --telegram-chat <chat ID>`.
+
+2) Slack
+
+Go to the Slack web interface -> Manage apps and create a new app.
+Give the app the `chat:write` scope and add the integration to a channel by typing `/invite <bot username>` there.
+After that, run the program with `--slack-token <token> --slack-chat <channel name>`.
 
 
 ## Which networks this is guaranteed to work?
