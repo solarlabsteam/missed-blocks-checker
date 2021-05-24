@@ -40,12 +40,19 @@ func (r TelegramReporter) Serialize(report Report) string {
 			status = "went back to normal"
 		}
 
-		if entry.ValidatorAddress != "" && entry.ValidatorMoniker != "" {
+		if entry.ValidatorAddress != "" {
 			validatorLink = fmt.Sprintf(
 				"<a href=\"https://www.mintscan.io/%s/validators/%s\">%s</a>",
 				MintscanPrefix,
 				entry.ValidatorAddress,
 				entry.ValidatorMoniker,
+			)
+		} else if entry.ValidatorMoniker == "" { // validator with empty moniker, can happen
+			validatorLink = fmt.Sprintf(
+				"<a href=\"https://www.mintscan.io/%s/validators/%s\">validator with key %s</a>",
+				MintscanPrefix,
+				entry.ValidatorAddress,
+				entry.Pubkey,
 			)
 		} else {
 			validatorLink = fmt.Sprintf("validator with key <code>%s</code>", entry.Pubkey)
