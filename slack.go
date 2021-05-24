@@ -48,10 +48,10 @@ func (r SlackReporter) Serialize(report Report) string {
 			)
 		} else if entry.ValidatorMoniker == "" { // validator with empty moniker, can happen
 			validatorLink = fmt.Sprintf(
-				"<https://www.mintscan.io/%s/validators/%s|validator with key %s>",
+				"<https://www.mintscan.io/%s/validators/%s|validator with address %s>",
 				MintscanPrefix,
 				entry.ValidatorAddress,
-				entry.Pubkey,
+				entry.ValidatorAddress,
 			)
 		} else {
 			validatorLink = fmt.Sprintf("validator with key `%s`", entry.Pubkey)
