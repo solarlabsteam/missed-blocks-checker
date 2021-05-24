@@ -39,7 +39,7 @@ func (r SlackReporter) Serialize(report Report) string {
 			status = "went back to normal"
 		}
 
-		if entry.ValidatorAddress != "" {
+		if entry.ValidatorAddress != "" && entry.ValidatorMoniker != "" {
 			validatorLink = fmt.Sprintf(
 				"<https://www.mintscan.io/%s/validators/%s|%s>",
 				MintscanPrefix,
