@@ -37,6 +37,9 @@ func (r SlackReporter) Serialize(report Report) string {
 		case WENT_BACK_TO_NORMAL:
 			emoji = "🟢"
 			status = "went back to normal"
+		case JAILED:
+			emoji = "❌"
+			status = "was jailed"
 		}
 
 		if entry.ValidatorAddress != "" && entry.ValidatorMoniker != "" {

@@ -7,6 +7,7 @@ const (
 	MISSING_BLOCKS
 	STOPPED_MISSING_BLOCKS
 	WENT_BACK_TO_NORMAL
+	JAILED
 )
 
 type ReportEntry struct {

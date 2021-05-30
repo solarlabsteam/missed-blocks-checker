@@ -319,6 +319,7 @@ func generateReport() *Report {
 		// 4) previous state > threshold, current state > threshold, diff == 0 - validator stopped missing blocks
 		// 5) previous state > threshold, current state > threshold, diff < 0 - window is moving
 		// 6) previous state > threshold, current state < threshold - window moved, validator is back to normal
+		// 7) previous state > threshold, current state < threshold - validator was jailed
 
 		if current > Threshold && previous <= Threshold {
 			// 2
@@ -375,8 +376,13 @@ func generateReport() *Report {
 			continue
 		} else if current <= Threshold && previous > Threshold && diff < 0 {
 			missedBlocksDecreased += 1
-			// 6
-			Direction = WENT_BACK_TO_NORMAL
+			if !validator.Jailed {
+				// 6
+				Direction = WENT_BACK_TO_NORMAL
+			} else {
+				// 7
+				Direction = JAILED
+			}
 		} else {
 			log.Fatal().Msg("Unexpected state")
 		}
