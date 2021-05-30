@@ -376,7 +376,7 @@ func generateReport() *Report {
 			continue
 		} else if current <= Threshold && previous > Threshold && diff < 0 {
 			missedBlocksDecreased += 1
-			if !validator.Jailed {
+			if signingInfo.JailedUntil.Local().UnixNano() < time.Now().UnixNano() { // is in the past
 				// 6
 				Direction = WENT_BACK_TO_NORMAL
 			} else {
