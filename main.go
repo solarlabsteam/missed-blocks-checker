@@ -488,7 +488,7 @@ func isValidatorMonitored(address string) bool {
 	// If monitoring all validators except the specified ones
 	for _, monitoredValidatorAddr := range ExcludeValidators {
 		if monitoredValidatorAddr == address {
-			return false
+			return true
 		}
 	}
 
