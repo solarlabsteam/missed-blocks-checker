@@ -10,6 +10,8 @@ import (
 
 	"github.com/cosmos/cosmos-sdk/simapp"
 	sdk "github.com/cosmos/cosmos-sdk/types"
+	tmrpc "github.com/tendermint/tendermint/rpc/client/http"
+	ctypes "github.com/tendermint/tendermint/types"
 
 	querytypes "github.com/cosmos/cosmos-sdk/types/query"
 	slashingtypes "github.com/cosmos/cosmos-sdk/x/slashing/types"
@@ -30,6 +32,7 @@ var (
 	Threshold      int64
 	Limit          uint64
 	MintscanPrefix string
+	TendermintRpc  string
 
 	TelegramToken string
 	TelegramChat  int
@@ -44,6 +47,9 @@ var (
 
 	IncludeValidators []string
 	ExcludeValidators []string
+
+	BlocksDiffInThePast int64 = 100
+	AvgBlockTime        float64
 
 	grpcConn *grpc.ClientConn
 )
@@ -151,6 +157,8 @@ func Execute(cmd *cobra.Command, args []string) {
 	}
 
 	defer grpcConn.Close()
+
+	setAvgBlockTime()
 
 	reporters = []Reporter{
 		&TelegramReporter{
@@ -495,6 +503,39 @@ func isValidatorMonitored(address string) bool {
 	return true
 }
 
+func setAvgBlockTime() {
+	latestBlock := getBlock(nil)
+	latestHeight := latestBlock.Height
+	beforeLatestBlockHeight := latestBlock.Height - BlocksDiffInThePast
+	beforeLatestBlock := getBlock(&beforeLatestBlockHeight)
+
+	heightDiff := float64(latestHeight - beforeLatestBlockHeight)
+	timeDiff := latestBlock.Time.Sub(beforeLatestBlock.Time).Seconds()
+
+	AvgBlockTime = heightDiff / timeDiff
+
+	log.Info().
+		Float64("heightDiff", heightDiff).
+		Float64("timeDiff", timeDiff).
+		Float64("avgBlockTime", AvgBlockTime).
+		Msg("Average block time calculated")
+
+}
+
+func getBlock(height *int64) ctypes.Block {
+	client, err := tmrpc.New(TendermintRpc, "/websocket")
+	if err != nil {
+		log.Fatal().Err(err).Msg("Could not create Tendermint client")
+	}
+
+	block, err := client.Block(context.Background(), height)
+	if err != nil {
+		log.Fatal().Err(err).Msg("Could not query Tendermint status")
+	}
+
+	return *block.Block
+}
+
 func main() {
 	rootCmd.PersistentFlags().StringVar(&ConfigPath, "config", "", "Config file path")
 	rootCmd.PersistentFlags().StringVar(&NodeAddress, "node", "localhost:9090", "RPC node address")
@@ -503,6 +544,7 @@ func main() {
 	rootCmd.PersistentFlags().Int64Var(&Threshold, "threshold", 0, "Threshold of missed blocks")
 	rootCmd.PersistentFlags().Uint64Var(&Limit, "limit", 1000, "gRPC query pagination limit")
 	rootCmd.PersistentFlags().StringVar(&MintscanPrefix, "mintscan-prefix", "persistence", "Prefix for mintscan links like https://mintscan.io/{prefix}")
+	rootCmd.PersistentFlags().StringVar(&TendermintRpc, "tendermint-rpc", "http://localhost:26657", "Tendermint RPC address")
 
 	rootCmd.PersistentFlags().StringVar(&TelegramToken, "telegram-token", "", "Telegram bot token")
 	rootCmd.PersistentFlags().IntVar(&TelegramChat, "telegram-chat", 0, "Telegram chat or user ID")
