@@ -525,7 +525,7 @@ func setMissedBlocksToJail() {
 			Msg("Could not parse delegator shares")
 	}
 
-	MissedBlocksToJail = int64(float64(params.Params.SignedBlocksWindow) / (1 - minSignedPerWindow))
+	MissedBlocksToJail = int64(float64(params.Params.SignedBlocksWindow) * (1 - minSignedPerWindow))
 
 	log.Info().
 		Int64("missedBlocksToJail", MissedBlocksToJail).
