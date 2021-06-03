@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strconv"
 	"time"
 
 	"google.golang.org/grpc"
@@ -50,6 +51,7 @@ var (
 
 	BlocksDiffInThePast int64 = 100
 	AvgBlockTime        float64
+	MissedBlocksToJail  int64
 
 	grpcConn *grpc.ClientConn
 )
@@ -159,6 +161,7 @@ func Execute(cmd *cobra.Command, args []string) {
 	defer grpcConn.Close()
 
 	setAvgBlockTime()
+	setMissedBlocksToJail()
 
 	reporters = []Reporter{
 		&TelegramReporter{
@@ -501,6 +504,32 @@ func isValidatorMonitored(address string) bool {
 	}
 
 	return true
+}
+
+func setMissedBlocksToJail() {
+	slashingClient := slashingtypes.NewQueryClient(grpcConn)
+	params, err := slashingClient.Params(
+		context.Background(),
+		&slashingtypes.QueryParamsRequest{},
+	)
+
+	if err != nil {
+		log.Fatal().Err(err).Msg("Could not query for slashing params")
+	}
+
+	// because cosmos's dec doesn't have .toFloat64() method or whatever and returns everything as int
+	minSignedPerWindow, err := strconv.ParseFloat(params.Params.MinSignedPerWindow.String(), 64)
+	if err != nil {
+		log.Fatal().
+			Err(err).
+			Msg("Could not parse delegator shares")
+	}
+
+	MissedBlocksToJail = int64(float64(params.Params.SignedBlocksWindow) / (1 - minSignedPerWindow))
+
+	log.Info().
+		Int64("missedBlocksToJail", MissedBlocksToJail).
+		Msg("Missed blocks to jail calculated")
 }
 
 func setAvgBlockTime() {

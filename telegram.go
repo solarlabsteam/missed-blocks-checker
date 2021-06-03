@@ -23,15 +23,18 @@ func (r TelegramReporter) Serialize(report Report) string {
 			emoji         string
 			status        string
 			validatorLink string
+			timeToJail    string = ""
 		)
 
 		switch entry.Direction {
 		case START_MISSING_BLOCKS:
 			emoji = "🚨"
 			status = "is missing blocks"
+			timeToJail = fmt.Sprintf(" (%s till jail)", entry.GetTimeToJail())
 		case MISSING_BLOCKS:
 			emoji = "🔴"
 			status = "is missing blocks"
+			timeToJail = fmt.Sprintf(" (%s till jail)", entry.GetTimeToJail())
 		case STOPPED_MISSING_BLOCKS:
 			emoji = "🟡"
 			status = "stopped missing blocks"
@@ -62,12 +65,13 @@ func (r TelegramReporter) Serialize(report Report) string {
 		}
 
 		sb.WriteString(fmt.Sprintf(
-			"%s <strong>%s %s</strong>: %d -> %d\n",
+			"%s <strong>%s %s</strong>: %d -> %d%s\n",
 			emoji,
 			validatorLink,
 			status,
 			entry.BeforeBlocksMissing,
 			entry.NowBlocksMissing,
+			timeToJail,
 		))
 	}
 

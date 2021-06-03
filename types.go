@@ -1,5 +1,7 @@
 package main
 
+import "time"
+
 type Direction int
 
 const (
@@ -17,6 +19,13 @@ type ReportEntry struct {
 	Direction           Direction
 	BeforeBlocksMissing int64
 	NowBlocksMissing    int64
+}
+
+func (r ReportEntry) GetTimeToJail() time.Duration {
+	blocksLeftToJail := MissedBlocksToJail - r.NowBlocksMissing
+	secondsLeftToJail := AvgBlockTime * float64(blocksLeftToJail)
+
+	return time.Duration(secondsLeftToJail) * time.Second
 }
 
 type Report struct {
