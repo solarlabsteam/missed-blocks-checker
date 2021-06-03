@@ -289,7 +289,7 @@ func generateReport() *Report {
 			log.Debug().Str("address", validator.OperatorAddress).Msg("---- Found validator for pubkey")
 
 			if !isValidatorMonitored(validator.OperatorAddress) {
-				log.Debug().Msg("---- Monitoring specific validators - skipping.")
+				log.Debug().Msg("---- Not monitoring this validator.")
 				continue
 			}
 
@@ -474,15 +474,21 @@ func isValidatorMonitored(address string) bool {
 		return true
 	}
 
+	// If monitoring only specific validators
+	if len(IncludeValidators) != 0 {
+		for _, monitoredValidatorAddr := range IncludeValidators {
+			if monitoredValidatorAddr == address {
+				return true
+			}
+		}
+
+		return false
+	}
+
+	// If monitoring all validators except the specified ones
 	for _, monitoredValidatorAddr := range ExcludeValidators {
 		if monitoredValidatorAddr == address {
 			return false
-		}
-	}
-
-	for _, monitoredValidatorAddr := range IncludeValidators {
-		if monitoredValidatorAddr == address {
-			return true
 		}
 	}
 
