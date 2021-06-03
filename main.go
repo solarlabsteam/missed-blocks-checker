@@ -512,7 +512,7 @@ func setAvgBlockTime() {
 	heightDiff := float64(latestHeight - beforeLatestBlockHeight)
 	timeDiff := latestBlock.Time.Sub(beforeLatestBlock.Time).Seconds()
 
-	AvgBlockTime = heightDiff / timeDiff
+	AvgBlockTime = timeDiff / heightDiff
 
 	log.Info().
 		Float64("heightDiff", heightDiff).
@@ -522,7 +522,7 @@ func setAvgBlockTime() {
 
 }
 
-func getBlock(height *int64) ctypes.Block {
+func getBlock(height *int64) *ctypes.Block {
 	client, err := tmrpc.New(TendermintRpc, "/websocket")
 	if err != nil {
 		log.Fatal().Err(err).Msg("Could not create Tendermint client")
@@ -533,7 +533,7 @@ func getBlock(height *int64) ctypes.Block {
 		log.Fatal().Err(err).Msg("Could not query Tendermint status")
 	}
 
-	return *block.Block
+	return block.Block
 }
 
 func main() {
