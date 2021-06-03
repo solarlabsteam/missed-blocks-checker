@@ -80,6 +80,11 @@ You can pass the artuments to the executable file to configure it. Here is the p
 - `--threshold` - If the missed blocks count is below this value, the messages are not sent. Defaults to 0.
 - `--mintscan-prefix` - This bot generates links to Mintscan for validators, using this prefix. Links have the following format: `https://mintscan.io/<mintscan-prefix>/validator/<validator ID>`. Defaults to `persistence`.
 - `--interval` - Interval between the two checks, in seconds. Defaults to 120
+- `--include` - a comma-separated list of validators' operators addresses. If specified, only the validators from this list would be monitored.
+- `--exclude` - a comma-separated list of validators' operators addresses. If specified, all validators except the ones from this list would be monitored.
+
+(Note that you cannot use `--include` and `--exclude` at the same time.)
+
 
 You can also specify custom Bech32 prefixes for wallets, validators, consensus nodes, and their pubkeys by using the following params:
 - `--bech-validator-prefix`

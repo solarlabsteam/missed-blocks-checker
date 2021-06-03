@@ -42,6 +42,9 @@ var (
 	ConsensusNodePrefix       string
 	ConsensusNodePubkeyPrefix string
 
+	IncludeValidators []string
+	ExcludeValidators []string
+
 	grpcConn *grpc.ClientConn
 )
 
@@ -56,8 +59,6 @@ var validators []stakingtypes.Validator
 
 var encCfg = simapp.MakeTestEncodingConfig()
 var interfaceRegistry = encCfg.InterfaceRegistry
-
-var validatorsToMonitor []string
 
 var rootCmd = &cobra.Command{
 	Use:  "missed-blocks-checker",
@@ -104,8 +105,6 @@ func Execute(cmd *cobra.Command, args []string) {
 
 	zerolog.SetGlobalLevel(logLevel)
 
-	validatorsToMonitor = args
-
 	config := sdk.GetConfig()
 	config.SetBech32PrefixForValidator(ValidatorPrefix, ValidatorPubkeyPrefix)
 	config.SetBech32PrefixForConsensusNode(ConsensusNodePrefix, ConsensusNodePubkeyPrefix)
@@ -123,12 +122,20 @@ func Execute(cmd *cobra.Command, args []string) {
 		Str("--bech-consensus-node-pubkey-prefix", ConsensusNodePubkeyPrefix).
 		Msg("Started with following parameters")
 
-	if len(validatorsToMonitor) == 0 {
+	if len(IncludeValidators) != 0 && len(ExcludeValidators) != 0 {
+		log.Fatal().Msg("Cannot use --include and --exclude at the same time!")
+	}
+
+	if len(IncludeValidators) == 0 && len(ExcludeValidators) == 0 {
 		log.Info().Msg("Monitoring all validators")
+	} else if len(IncludeValidators) != 0 {
+		log.Info().
+			Strs("validators", IncludeValidators).
+			Msg("Monitoring specific validators")
 	} else {
 		log.Info().
-			Strs("validators", validatorsToMonitor).
-			Msg("Monitoring specific validators")
+			Strs("validators", ExcludeValidators).
+			Msg("Monitoring all validators except specific")
 	}
 
 	if err != nil {
@@ -289,10 +296,10 @@ func generateReport() *Report {
 			ValidatorAddress = validator.OperatorAddress
 			ValidatorMoniker = validator.Description.Moniker
 		} else {
-			// if monitoring all validators, we want to be notified also about
-			// those where we cannot get the validator info, if specific ones - we want
-			// to skip these
-			if len(validatorsToMonitor) != 0 {
+			// If monitoring all validators or all validators except specific ones,
+			// we want to be notified also about those where we cannot get the validator info,
+			// if monitoring specific valdators - we want to skip these
+			if len(IncludeValidators) != 0 {
 				log.Debug().Msg("---- No pubkey info, monitoring specific validators - skipping.")
 				continue
 			}
@@ -463,11 +470,17 @@ func findValidator(address string) (stakingtypes.Validator, bool) {
 
 func isValidatorMonitored(address string) bool {
 	// If no args passed, we want to be notified about all validators.
-	if len(validatorsToMonitor) == 0 {
+	if len(IncludeValidators) == 0 && len(ExcludeValidators) == 0 {
 		return true
 	}
 
-	for _, monitoredValidatorAddr := range validatorsToMonitor {
+	for _, monitoredValidatorAddr := range ExcludeValidators {
+		if monitoredValidatorAddr == address {
+			return false
+		}
+	}
+
+	for _, monitoredValidatorAddr := range IncludeValidators {
 		if monitoredValidatorAddr == address {
 			return true
 		}
@@ -489,6 +502,9 @@ func main() {
 	rootCmd.PersistentFlags().IntVar(&TelegramChat, "telegram-chat", 0, "Telegram chat or user ID")
 	rootCmd.PersistentFlags().StringVar(&SlackToken, "slack-token", "", "Slack bot token")
 	rootCmd.PersistentFlags().StringVar(&SlackChat, "slack-chat", "", "Slack chat or user ID")
+
+	rootCmd.PersistentFlags().StringSliceVar(&IncludeValidators, "include", []string{}, "Validators to monitor")
+	rootCmd.PersistentFlags().StringSliceVar(&ExcludeValidators, "exclude", []string{}, "Validators to not monitor")
 
 	// some networks, like Iris, have the different prefixes for address, validator and consensus node
 	rootCmd.PersistentFlags().StringVar(&Prefix, "bech-prefix", "persistence", "Bech32 global prefix")
