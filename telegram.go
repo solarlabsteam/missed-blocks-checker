@@ -95,10 +95,10 @@ func (r *TelegramReporter) Init() {
 		return
 	}
 
-	bot.Handle("/start", r.getHelp)
-	bot.Handle("/help", r.getHelp)
-
 	r.TelegramBot = bot
+	r.TelegramBot.Handle("/start", r.getHelp)
+	r.TelegramBot.Handle("/help", r.getHelp)
+	r.TelegramBot.Start()
 }
 
 func (r TelegramReporter) Enabled() bool {
@@ -143,7 +143,7 @@ func (r TelegramReporter) getHelp(message *tb.Message) {
 	sb.WriteString("Can understand the following commands:\n")
 	sb.WriteString("- /subscribe &lt;validator address&gt; - be notified on validator's missed block in a Telegram channel)\n")
 	sb.WriteString("- /unsubscribe &lt;validator address&gt; - undo the subscription given at the previous step\n")
-	sb.WriteString("- /status &lt;validator address&gt; - get validator missed blocks\n\n")
+	sb.WriteString("- /status &lt;validator address&gt; - get validator missed blocks\n")
 	sb.WriteString("- /status - get the missed blocks of the validator(s) you're subscribed to\n\n")
 	sb.WriteString("Created by <a href=\"https://validator.solar\">SOLAR Labs</a> with ❤️.\n")
 	sb.WriteString("This bot is open-sourced, you can get the source code at https://github.com/solarlabsteam/missed-blocks-checker.\n\n")
