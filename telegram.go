@@ -1,10 +1,14 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"time"
 
+	"github.com/cosmos/cosmos-sdk/simapp"
+	slashingtypes "github.com/cosmos/cosmos-sdk/x/slashing/types"
+	stakingtypes "github.com/cosmos/cosmos-sdk/x/staking/types"
 	tb "gopkg.in/tucnak/telebot.v2"
 )
 
@@ -98,6 +102,7 @@ func (r *TelegramReporter) Init() {
 	r.TelegramBot = bot
 	r.TelegramBot.Handle("/start", r.getHelp)
 	r.TelegramBot.Handle("/help", r.getHelp)
+	r.TelegramBot.Handle("/status", r.getValidatorStatus)
 	r.TelegramBot.Start()
 }
 
@@ -141,7 +146,7 @@ func (r TelegramReporter) getHelp(message *tb.Message) {
 	sb.WriteString("<strong>missed-block-checker</strong>\n\n")
 	sb.WriteString(fmt.Sprintf("Query for the %s network info.\n", MintscanPrefix))
 	sb.WriteString("Can understand the following commands:\n")
-	sb.WriteString("- /subscribe &lt;validator address&gt; - be notified on validator's missed block in a Telegram channel)\n")
+	sb.WriteString("- /subscribe &lt;validator address&gt; - be notified on validator's missed block in a Telegram channel\n")
 	sb.WriteString("- /unsubscribe &lt;validator address&gt; - undo the subscription given at the previous step\n")
 	sb.WriteString("- /status &lt;validator address&gt; - get validator missed blocks\n")
 	sb.WriteString("- /status - get the missed blocks of the validator(s) you're subscribed to\n\n")
@@ -156,6 +161,86 @@ func (r TelegramReporter) getHelp(message *tb.Message) {
 	sb.WriteString("- <a href=\"https://www.mintscan.io/sentinel/validators/sentvaloper1sazxkmhym0zcg9tmzvc4qxesqegs3q4u66tpmf\">Sentinel</a>\n")
 	sb.WriteString("- <a href=\"https://www.mintscan.io/persistence/validators/persistencevaloper1kp2sype5n0ky3f8u50pe0jlfcgwva9y79qlpgy\">Persistence</a>\n")
 	sb.WriteString("- <a href=\"https://www.mintscan.io/osmosis/validators/osmovaloper16jn3383fn4v4vuuvgclr3q7rumeglw8kdq6e48\">Osmosis</a>\n")
+
+	r.sendMessage(message, sb.String())
+	log.Info().
+		Str("user", message.Sender.Username).
+		Msg("Successfully returned help info")
+}
+
+func (r TelegramReporter) getValidatorStatus(message *tb.Message) {
+	args := strings.SplitAfterN(message.Text, " ", 2)
+	if len(args) < 2 {
+		r.sendMessage(message, "Not supported yet.")
+		return
+	}
+
+	address := args[1]
+	log.Debug().Str("address", address).Msg("getValidatorStatus: address")
+
+	stakingClient := stakingtypes.NewQueryClient(grpcConn)
+	slashingClient := slashingtypes.NewQueryClient(grpcConn)
+
+	validatorResponse, err := stakingClient.Validator(
+		context.Background(),
+		&stakingtypes.QueryValidatorRequest{ValidatorAddr: address},
+	)
+
+	if err != nil {
+		log.Error().
+			Str("address", address).
+			Err(err).
+			Msg("Could not get validators")
+		r.sendMessage(message, "Could not find validator")
+	}
+
+	encCfg := simapp.MakeTestEncodingConfig()
+	interfaceRegistry := encCfg.InterfaceRegistry
+
+	err = validatorResponse.Validator.UnpackInterfaces(interfaceRegistry) // Unpack interfaces, to populate the Anys' cached values
+	if err != nil {
+		log.Error().
+			Str("address", address).
+			Err(err).
+			Msg("Could not get unpack validator inferfaces")
+		r.sendMessage(message, "Error querying validator")
+	}
+
+	pubKey, err := validatorResponse.Validator.GetConsAddr()
+	if err != nil {
+		log.Error().
+			Str("address", address).
+			Err(err).
+			Msg("Could not get validator pubkey")
+		r.sendMessage(message, "Could not get validator pubkey")
+	}
+
+	signingInfosResponse, err := slashingClient.SigningInfo(
+		context.Background(),
+		&slashingtypes.QuerySigningInfoRequest{ConsAddress: pubKey.String()},
+	)
+
+	if err != nil {
+		log.Error().
+			Str("address", address).
+			Err(err).
+			Msg("Could not get signing info")
+		r.sendMessage(message, "Could not get signing info")
+	}
+
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("<code>%s</code>\n", validatorResponse.Validator.Description.Moniker))
+	sb.WriteString(fmt.Sprintf(
+		"Missed blocks: %d/%d (%.2f%%)\n",
+		signingInfosResponse.ValSigningInfo.MissedBlocksCounter,
+		SignedBlocksWindow,
+		float64(signingInfosResponse.ValSigningInfo.MissedBlocksCounter/SignedBlocksWindow*100),
+	))
+	sb.WriteString(fmt.Sprintf(
+		"<a href=\"https://mintscan.io/%s/validators/%s\">Mintscan</a>\n",
+		MintscanPrefix,
+		validatorResponse.Validator.OperatorAddress,
+	))
 
 	r.sendMessage(message, sb.String())
 	log.Info().

@@ -52,6 +52,7 @@ var (
 
 	BlocksDiffInThePast int64 = 100
 	AvgBlockTime        float64
+	SignedBlocksWindow  int64
 	MissedBlocksToJail  int64
 
 	grpcConn *grpc.ClientConn
@@ -527,6 +528,7 @@ func setMissedBlocksToJail() {
 			Msg("Could not parse delegator shares")
 	}
 
+	SignedBlocksWindow = params.Params.SignedBlocksWindow
 	MissedBlocksToJail = int64(float64(params.Params.SignedBlocksWindow) * (1 - minSignedPerWindow))
 
 	log.Info().
