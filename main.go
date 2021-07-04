@@ -35,10 +35,11 @@ var (
 	MintscanPrefix string
 	TendermintRpc  string
 
-	TelegramToken string
-	TelegramChat  int
-	SlackToken    string
-	SlackChat     string
+	TelegramToken      string
+	TelegramConfigPath string
+	TelegramChat       int
+	SlackToken         string
+	SlackChat          string
 
 	Prefix                    string
 	ValidatorPrefix           string
@@ -165,8 +166,9 @@ func Execute(cmd *cobra.Command, args []string) {
 
 	reporters = []Reporter{
 		&TelegramReporter{
-			TelegramToken: TelegramToken,
-			TelegramChat:  TelegramChat,
+			TelegramToken:      TelegramToken,
+			TelegramChat:       TelegramChat,
+			TelegramConfigPath: TelegramConfigPath,
 		},
 		&SlackReporter{
 			SlackToken: SlackToken,
@@ -577,6 +579,7 @@ func main() {
 
 	rootCmd.PersistentFlags().StringVar(&TelegramToken, "telegram-token", "", "Telegram bot token")
 	rootCmd.PersistentFlags().IntVar(&TelegramChat, "telegram-chat", 0, "Telegram chat or user ID")
+	rootCmd.PersistentFlags().StringVar(&TelegramConfigPath, "telegram-config", "", "Telegram config path")
 	rootCmd.PersistentFlags().StringVar(&SlackToken, "slack-token", "", "Slack bot token")
 	rootCmd.PersistentFlags().StringVar(&SlackChat, "slack-chat", "", "Slack chat or user ID")
 

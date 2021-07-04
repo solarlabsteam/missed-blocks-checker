@@ -5,14 +5,15 @@ import (
 	"strings"
 	"time"
 
-	telegramBot "gopkg.in/tucnak/telebot.v2"
+	tb "gopkg.in/tucnak/telebot.v2"
 )
 
 type TelegramReporter struct {
-	TelegramToken string
-	TelegramChat  int
+	TelegramToken      string
+	TelegramChat       int
+	TelegramConfigPath string
 
-	TelegramBot *telegramBot.Bot
+	TelegramBot *tb.Bot
 }
 
 func (r TelegramReporter) Serialize(report Report) string {
@@ -79,20 +80,23 @@ func (r TelegramReporter) Serialize(report Report) string {
 }
 
 func (r *TelegramReporter) Init() {
-	if r.TelegramToken == "" || r.TelegramChat == 0 {
-		log.Debug().Msg("Telegram credentials not set, not creating Telegram reporter.")
+	if r.TelegramToken == "" || r.TelegramChat == 0 || r.TelegramConfigPath == "" {
+		log.Debug().Msg("Telegram credentials or config path not set, not creating Telegram reporter.")
 		return
 	}
 
-	bot, err := telegramBot.NewBot(telegramBot.Settings{
+	bot, err := tb.NewBot(tb.Settings{
 		Token:  TelegramToken,
-		Poller: &telegramBot.LongPoller{Timeout: 10 * time.Second},
+		Poller: &tb.LongPoller{Timeout: 10 * time.Second},
 	})
 
 	if err != nil {
 		log.Warn().Err(err).Msg("Could not create Telegram bot")
 		return
 	}
+
+	bot.Handle("/start", r.getHelp)
+	bot.Handle("/help", r.getHelp)
 
 	r.TelegramBot = bot
 }
@@ -104,15 +108,57 @@ func (r TelegramReporter) Enabled() bool {
 func (r TelegramReporter) SendReport(report Report) error {
 	serializedReport := r.Serialize(report)
 	_, err := r.TelegramBot.Send(
-		&telegramBot.User{
+		&tb.User{
 			ID: r.TelegramChat,
 		},
 		serializedReport,
-		telegramBot.ModeHTML,
+		tb.ModeHTML,
 	)
 	return err
 }
 
 func (r TelegramReporter) Name() string {
 	return "TelegramReporter"
+}
+
+func (r TelegramReporter) sendMessage(message *tb.Message, text string) {
+	_, err := r.TelegramBot.Send(
+		message.Chat,
+		text,
+		&tb.SendOptions{
+			ParseMode: tb.ModeHTML,
+			ReplyTo:   message,
+		},
+	)
+
+	if err != nil {
+		log.Error().Err(err).Msg("Could not send Telegram message")
+	}
+}
+
+func (r TelegramReporter) getHelp(message *tb.Message) {
+	var sb strings.Builder
+	sb.WriteString("<strong>missed-block-checker</strong>\n\n")
+	sb.WriteString(fmt.Sprintf("Query for the %s network info.\n", MintscanPrefix))
+	sb.WriteString("Can understand the following commands:\n")
+	sb.WriteString("- /subscribe &lt;validator address&gt; - be notified on validator's missed block in a Telegram channel)\n")
+	sb.WriteString("- /unsubscribe &lt;validator address&gt; - undo the subscription given at the previous step\n")
+	sb.WriteString("- /status &lt;validator address&gt; - get validator missed blocks\n\n")
+	sb.WriteString("- /status - get the missed blocks of the validator(s) you're subscribed to\n\n")
+	sb.WriteString("Created by <a href=\"https://validator.solar\">SOLAR Labs</a> with ❤️.\n")
+	sb.WriteString("This bot is open-sourced, you can get the source code at https://github.com/solarlabsteam/missed-blocks-checker.\n\n")
+	sb.WriteString("We also maintain the following tools for Cosmos ecosystem:\n")
+	sb.WriteString("- <a href=\"https://github.com/solarlabsteam/cosmos-interacter\">cosmos-interacter</a> - a bot that can return info about Cosmos-based blockchain params.\n")
+	sb.WriteString("- <a href=\"https://github.com/solarlabsteam/cosmos-exporter\">cosmos-exporter</a> - scrape the blockchain data from the local node and export it to Prometheus\n")
+	sb.WriteString("- <a href=\"https://github.com/solarlabsteam/coingecko-exporter\">coingecko-exporter</a> - scrape the Coingecko exchange rate and export it to Prometheus\n")
+	sb.WriteString("- <a href=\"https://github.com/solarlabsteam/cosmos-transactions-bot\">cosmos-transactions-bot</a> - monitor the incoming transactions for a given filter\n\n")
+	sb.WriteString("If you like what we're doing, consider staking with us!\n")
+	sb.WriteString("- <a href=\"https://www.mintscan.io/sentinel/validators/sentvaloper1sazxkmhym0zcg9tmzvc4qxesqegs3q4u66tpmf\">Sentinel</a>\n")
+	sb.WriteString("- <a href=\"https://www.mintscan.io/persistence/validators/persistencevaloper1kp2sype5n0ky3f8u50pe0jlfcgwva9y79qlpgy\">Persistence</a>\n")
+	sb.WriteString("- <a href=\"https://www.mintscan.io/osmosis/validators/osmovaloper16jn3383fn4v4vuuvgclr3q7rumeglw8kdq6e48\">Osmosis</a>\n")
+
+	r.sendMessage(message, sb.String())
+	log.Info().
+		Str("user", message.Sender.Username).
+		Msg("Successfully returned help info")
 }
