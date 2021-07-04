@@ -234,7 +234,7 @@ func (r TelegramReporter) getValidatorStatus(message *tb.Message) {
 		"Missed blocks: %d/%d (%.2f%%)\n",
 		signingInfosResponse.ValSigningInfo.MissedBlocksCounter,
 		SignedBlocksWindow,
-		float64(signingInfosResponse.ValSigningInfo.MissedBlocksCounter/SignedBlocksWindow*100),
+		float64(signingInfosResponse.ValSigningInfo.MissedBlocksCounter)/float64(SignedBlocksWindow)*100,
 	))
 	sb.WriteString(fmt.Sprintf(
 		"<a href=\"https://mintscan.io/%s/validators/%s\">Mintscan</a>\n",
