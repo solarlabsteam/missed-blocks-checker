@@ -34,7 +34,7 @@ type TelegramConfig struct {
 	NotiticationInfos []NotificationInfo
 }
 
-func (c TelegramConfig) addNotifier(validatorAddress string, notifierToAdd string) {
+func (c *TelegramConfig) addNotifier(validatorAddress string, notifierToAdd string) {
 	for _, notifier := range c.NotiticationInfos {
 		if notifier.ValidatorAddress == validatorAddress {
 			notifier.Notifiers = append(notifier.Notifiers, notifierToAdd)
