@@ -148,23 +148,6 @@ func Execute(cmd *cobra.Command, args []string) {
 			Msg("Monitoring all validators except specific")
 	}
 
-	if err != nil {
-		log.Fatal().Err(err).Msg("Could not create Telegram bot")
-	}
-
-	grpcConn, err = grpc.Dial(
-		NodeAddress,
-		grpc.WithInsecure(),
-	)
-	if err != nil {
-		log.Fatal().Err(err).Msg("Could not establish gRPC connection")
-	}
-
-	defer grpcConn.Close()
-
-	setAvgBlockTime()
-	setMissedBlocksToJail()
-
 	reporters = []Reporter{
 		&TelegramReporter{
 			TelegramToken:      TelegramToken,
@@ -181,6 +164,19 @@ func Execute(cmd *cobra.Command, args []string) {
 		log.Info().Str("name", reporter.Name()).Msg("Init reporter")
 		reporter.Init()
 	}
+
+	grpcConn, err = grpc.Dial(
+		NodeAddress,
+		grpc.WithInsecure(),
+	)
+	if err != nil {
+		log.Fatal().Err(err).Msg("Could not establish gRPC connection")
+	}
+
+	defer grpcConn.Close()
+
+	setAvgBlockTime()
+	setMissedBlocksToJail()
 
 	for {
 		report := generateReport()

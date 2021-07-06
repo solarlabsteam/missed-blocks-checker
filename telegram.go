@@ -3,12 +3,16 @@ package main
 import (
 	"context"
 	"fmt"
+	"io/ioutil"
+	"os"
 	"strings"
 	"time"
 
 	"github.com/cosmos/cosmos-sdk/simapp"
 	slashingtypes "github.com/cosmos/cosmos-sdk/x/slashing/types"
 	stakingtypes "github.com/cosmos/cosmos-sdk/x/staking/types"
+
+	"github.com/BurntSushi/toml"
 	tb "gopkg.in/tucnak/telebot.v2"
 )
 
@@ -16,8 +20,30 @@ type TelegramReporter struct {
 	TelegramToken      string
 	TelegramChat       int
 	TelegramConfigPath string
+	TelegramConfig     TelegramConfig
 
 	TelegramBot *tb.Bot
+}
+
+type NotificationInfo struct {
+	ValidatorAddress string
+	Notifiers        []string
+}
+
+type TelegramConfig struct {
+	NotiticationInfos []NotificationInfo
+}
+
+func (c TelegramConfig) addNotifier(validatorAddress string, notifierToAdd string) {
+	for _, notifier := range c.NotiticationInfos {
+		if notifier.ValidatorAddress == validatorAddress {
+			notifier.Notifiers = append(notifier.Notifiers, notifierToAdd)
+			return
+		}
+	}
+
+	newNotitficationInfo := NotificationInfo{ValidatorAddress: validatorAddress, Notifiers: []string{notifierToAdd}}
+	c.NotiticationInfos = append(c.NotiticationInfos, newNotitficationInfo)
 }
 
 func (r TelegramReporter) Serialize(report Report) string {
@@ -103,7 +129,10 @@ func (r *TelegramReporter) Init() {
 	r.TelegramBot.Handle("/start", r.getHelp)
 	r.TelegramBot.Handle("/help", r.getHelp)
 	r.TelegramBot.Handle("/status", r.getValidatorStatus)
-	r.TelegramBot.Start()
+	r.TelegramBot.Handle("/subscribe", r.subscribeToValidatorUpdates)
+	go r.TelegramBot.Start()
+
+	r.loadConfigFromYaml()
 }
 
 func (r TelegramReporter) Enabled() bool {
@@ -246,4 +275,89 @@ func (r TelegramReporter) getValidatorStatus(message *tb.Message) {
 	log.Info().
 		Str("user", message.Sender.Username).
 		Msg("Successfully returned help info")
+}
+
+func (r TelegramReporter) subscribeToValidatorUpdates(message *tb.Message) {
+	if message.Sender.Username == "" {
+		r.sendMessage(message, "Please set your Telegram username first.")
+		return
+	}
+
+	args := strings.SplitAfterN(message.Text, " ", 2)
+	if len(args) < 2 {
+		r.sendMessage(message, "Usage: /subscribe &lt;validator address&gt;")
+		return
+	}
+
+	address := args[1]
+	log.Debug().Str("address", address).Msg("subscribeToValidatorUpdates: address")
+
+	stakingClient := stakingtypes.NewQueryClient(grpcConn)
+
+	validatorResponse, err := stakingClient.Validator(
+		context.Background(),
+		&stakingtypes.QueryValidatorRequest{ValidatorAddr: address},
+	)
+
+	if err != nil {
+		log.Error().
+			Str("address", address).
+			Err(err).
+			Msg("Could not get validator")
+		r.sendMessage(message, "Could not find validator")
+	}
+
+	r.TelegramConfig.addNotifier(address, message.Sender.Username)
+	r.saveYamlConfig()
+
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("Subscribed to the notification of <code>%s</code> ", validatorResponse.Validator.Description.Moniker))
+	sb.WriteString(fmt.Sprintf(
+		"<a href=\"https://mintscan.io/%s/validators/%s\">Mintscan</a>\n",
+		MintscanPrefix,
+		validatorResponse.Validator.OperatorAddress,
+	))
+
+	r.sendMessage(message, sb.String())
+	log.Info().
+		Str("user", message.Sender.Username).
+		Str("address", address).
+		Msg("Successfully subscribed to validator's notifications.")
+}
+
+func (r TelegramReporter) loadConfigFromYaml() {
+	if _, err := os.Stat(r.TelegramConfigPath); os.IsNotExist(err) {
+		log.Info().Str("path", r.TelegramConfigPath).Msg("Telegram config file does not exist, creating.")
+		if _, err = os.Create(r.TelegramConfigPath); err != nil {
+			log.Fatal().Err(err).Msg("Could not create Telegram config!")
+		}
+	} else if err != nil {
+		log.Fatal().Err(err).Msg("Could not fetch Telegram config!")
+	}
+
+	bytes, err := ioutil.ReadFile(r.TelegramConfigPath)
+	if err != nil {
+		log.Fatal().Err(err).Msg("Could not read Telegram config!")
+	}
+
+	var conf TelegramConfig
+	if _, err := toml.Decode(string(bytes), &conf); err != nil {
+		log.Fatal().Err(err).Msg("Could not load Telegram config!")
+	}
+
+	r.TelegramConfig = conf
+	log.Debug().Msg("Telegram config is loaded successfully.")
+}
+
+func (r TelegramReporter) saveYamlConfig() {
+	var bytes []byte
+	if err := toml.Unmarshal(bytes, r.TelegramConfig); err != nil {
+		log.Fatal().Err(err).Msg("Could not serialize Telegram config")
+	}
+
+	if err := ioutil.WriteFile(r.TelegramConfigPath, bytes, 0644); err != nil {
+		log.Fatal().Err(err).Msg("Could not read Telegram config!")
+	}
+
+	log.Debug().Msg("Telegram config is updated successfully.")
 }

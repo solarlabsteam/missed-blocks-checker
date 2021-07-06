@@ -5,6 +5,7 @@ go 1.16
 replace github.com/gogo/protobuf => github.com/regen-network/protobuf v1.3.3-alpha.regen.1
 
 require (
+	github.com/BurntSushi/toml v0.3.1
 	github.com/cosmos/cosmos-sdk v0.42.4
 	github.com/rs/zerolog v1.21.0
 	github.com/slack-go/slack v0.9.1
