@@ -221,6 +221,7 @@ func (r TelegramReporter) getValidatorStatus(message *tb.Message) {
 			Err(err).
 			Msg("Could not get validators")
 		r.sendMessage(message, "Could not find validator")
+		return
 	}
 
 	encCfg := simapp.MakeTestEncodingConfig()
@@ -233,6 +234,7 @@ func (r TelegramReporter) getValidatorStatus(message *tb.Message) {
 			Err(err).
 			Msg("Could not get unpack validator inferfaces")
 		r.sendMessage(message, "Error querying validator")
+		return
 	}
 
 	pubKey, err := validatorResponse.Validator.GetConsAddr()
@@ -242,6 +244,7 @@ func (r TelegramReporter) getValidatorStatus(message *tb.Message) {
 			Err(err).
 			Msg("Could not get validator pubkey")
 		r.sendMessage(message, "Could not get validator pubkey")
+		return
 	}
 
 	signingInfosResponse, err := slashingClient.SigningInfo(
@@ -255,6 +258,7 @@ func (r TelegramReporter) getValidatorStatus(message *tb.Message) {
 			Err(err).
 			Msg("Could not get signing info")
 		r.sendMessage(message, "Could not get signing info")
+		return
 	}
 
 	var sb strings.Builder
@@ -305,6 +309,7 @@ func (r TelegramReporter) subscribeToValidatorUpdates(message *tb.Message) {
 			Err(err).
 			Msg("Could not get validator")
 		r.sendMessage(message, "Could not find validator")
+		return
 	}
 
 	r.TelegramConfig.addNotifier(address, message.Sender.Username)
@@ -351,7 +356,7 @@ func (r TelegramReporter) loadConfigFromYaml() {
 
 func (r TelegramReporter) saveYamlConfig() {
 	var bytes []byte
-	if err := toml.Unmarshal(bytes, r.TelegramConfig); err != nil {
+	if err := toml.Unmarshal(bytes, &r.TelegramConfig); err != nil {
 		log.Fatal().Err(err).Msg("Could not serialize Telegram config")
 	}
 
