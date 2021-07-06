@@ -8,7 +8,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cosmos/cosmos-sdk/simapp"
 	slashingtypes "github.com/cosmos/cosmos-sdk/x/slashing/types"
 	stakingtypes "github.com/cosmos/cosmos-sdk/x/staking/types"
 
@@ -31,19 +30,61 @@ type NotificationInfo struct {
 }
 
 type TelegramConfig struct {
-	NotiticationInfos []NotificationInfo
+	NotiticationInfos []*NotificationInfo
 }
 
-func (c *TelegramConfig) addNotifier(validatorAddress string, notifierToAdd string) {
+func (i *NotificationInfo) addNotifier(notifier string) error {
+	if stringInSlice(notifier, i.Notifiers) {
+		return fmt.Errorf("You are already subscribed to this validator's notifications.") //nolint
+	}
+
+	i.Notifiers = append(i.Notifiers, notifier)
+	return nil
+}
+
+func (i *NotificationInfo) removeNotifier(notifier string) error {
+	if !stringInSlice(notifier, i.Notifiers) {
+		return fmt.Errorf("You are not subscribed to this validator's notifications.") //nolint
+	}
+
+	i.Notifiers = removeFromSlice(i.Notifiers, notifier)
+	return nil
+}
+
+func (c *TelegramConfig) addNotifier(validatorAddress string, notifierToAdd string) error {
 	for _, notifier := range c.NotiticationInfos {
 		if notifier.ValidatorAddress == validatorAddress {
-			notifier.Notifiers = append(notifier.Notifiers, notifierToAdd)
-			return
+			return notifier.addNotifier(notifierToAdd)
 		}
 	}
 
-	newNotitficationInfo := NotificationInfo{ValidatorAddress: validatorAddress, Notifiers: []string{notifierToAdd}}
-	c.NotiticationInfos = append(c.NotiticationInfos, newNotitficationInfo)
+	newNotificationInfo := NotificationInfo{ValidatorAddress: validatorAddress, Notifiers: []string{notifierToAdd}}
+	c.NotiticationInfos = append(c.NotiticationInfos, &newNotificationInfo)
+	return nil
+}
+
+func (c *TelegramConfig) removeNotifier(validatorAddress string, notifierToAdd string) error {
+	for _, notifier := range c.NotiticationInfos {
+		if notifier.ValidatorAddress == validatorAddress {
+			return notifier.removeNotifier(notifierToAdd)
+		}
+	}
+
+	return fmt.Errorf("You are not subscribed to this validator's notifications.") //nolint
+}
+
+func (c *TelegramConfig) getNotifiersSerialized(address string) string {
+	var sb strings.Builder
+
+	for _, validator := range c.NotiticationInfos {
+		if validator.ValidatorAddress == address {
+			for _, notifier := range validator.Notifiers {
+				sb.WriteString("@" + notifier + " ")
+			}
+		}
+	}
+
+	return sb.String()
 }
 
 func (r TelegramReporter) Serialize(report Report) string {
@@ -95,14 +136,17 @@ func (r TelegramReporter) Serialize(report Report) string {
 			validatorLink = fmt.Sprintf("<code>%s</code>", entry.Pubkey)
 		}
 
+		notifiers := r.TelegramConfig.getNotifiersSerialized(entry.ValidatorAddress)
+
 		sb.WriteString(fmt.Sprintf(
-			"%s <strong>%s %s</strong>: %d -> %d%s\n",
+			"%s <strong>%s %s</strong>: %d -> %d%s %s\n",
 			emoji,
 			validatorLink,
 			status,
 			entry.BeforeBlocksMissing,
 			entry.NowBlocksMissing,
 			timeToJail,
+			notifiers,
 		))
 	}
 
@@ -130,6 +174,7 @@ func (r *TelegramReporter) Init() {
 	r.TelegramBot.Handle("/help", r.getHelp)
 	r.TelegramBot.Handle("/status", r.getValidatorStatus)
 	r.TelegramBot.Handle("/subscribe", r.subscribeToValidatorUpdates)
+	r.TelegramBot.Handle("/unsubscribe", r.unsubscribeFromValidatorUpdates)
 	go r.TelegramBot.Start()
 
 	r.loadConfigFromYaml()
@@ -197,7 +242,7 @@ func (r TelegramReporter) getHelp(message *tb.Message) {
 		Msg("Successfully returned help info")
 }
 
-func (r TelegramReporter) getValidatorStatus(message *tb.Message) {
+func (r *TelegramReporter) getValidatorStatus(message *tb.Message) {
 	args := strings.SplitAfterN(message.Text, " ", 2)
 	if len(args) < 2 {
 		r.sendMessage(message, "Not supported yet.")
@@ -207,13 +252,7 @@ func (r TelegramReporter) getValidatorStatus(message *tb.Message) {
 	address := args[1]
 	log.Debug().Str("address", address).Msg("getValidatorStatus: address")
 
-	stakingClient := stakingtypes.NewQueryClient(grpcConn)
-	slashingClient := slashingtypes.NewQueryClient(grpcConn)
-
-	validatorResponse, err := stakingClient.Validator(
-		context.Background(),
-		&stakingtypes.QueryValidatorRequest{ValidatorAddr: address},
-	)
+	validator, err := getValidator(address)
 
 	if err != nil {
 		log.Error().
@@ -224,55 +263,24 @@ func (r TelegramReporter) getValidatorStatus(message *tb.Message) {
 		return
 	}
 
-	encCfg := simapp.MakeTestEncodingConfig()
-	interfaceRegistry := encCfg.InterfaceRegistry
-
-	err = validatorResponse.Validator.UnpackInterfaces(interfaceRegistry) // Unpack interfaces, to populate the Anys' cached values
+	signingInfo, err := getSigningInfo(validator)
 	if err != nil {
-		log.Error().
-			Str("address", address).
-			Err(err).
-			Msg("Could not get unpack validator inferfaces")
-		r.sendMessage(message, "Error querying validator")
-		return
-	}
-
-	pubKey, err := validatorResponse.Validator.GetConsAddr()
-	if err != nil {
-		log.Error().
-			Str("address", address).
-			Err(err).
-			Msg("Could not get validator pubkey")
-		r.sendMessage(message, "Could not get validator pubkey")
-		return
-	}
-
-	signingInfosResponse, err := slashingClient.SigningInfo(
-		context.Background(),
-		&slashingtypes.QuerySigningInfoRequest{ConsAddress: pubKey.String()},
-	)
-
-	if err != nil {
-		log.Error().
-			Str("address", address).
-			Err(err).
-			Msg("Could not get signing info")
-		r.sendMessage(message, "Could not get signing info")
+		r.sendMessage(message, "Could not get missed blocks info")
 		return
 	}
 
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("<code>%s</code>\n", validatorResponse.Validator.Description.Moniker))
+	sb.WriteString(fmt.Sprintf("<code>%s</code>\n", validator.Description.Moniker))
 	sb.WriteString(fmt.Sprintf(
 		"Missed blocks: %d/%d (%.2f%%)\n",
-		signingInfosResponse.ValSigningInfo.MissedBlocksCounter,
+		signingInfo.MissedBlocksCounter,
 		SignedBlocksWindow,
-		float64(signingInfosResponse.ValSigningInfo.MissedBlocksCounter)/float64(SignedBlocksWindow)*100,
+		float64(signingInfo.MissedBlocksCounter)/float64(SignedBlocksWindow)*100,
 	))
 	sb.WriteString(fmt.Sprintf(
 		"<a href=\"https://mintscan.io/%s/validators/%s\">Mintscan</a>\n",
 		MintscanPrefix,
-		validatorResponse.Validator.OperatorAddress,
+		validator.OperatorAddress,
 	))
 
 	r.sendMessage(message, sb.String())
@@ -281,7 +289,7 @@ func (r TelegramReporter) getValidatorStatus(message *tb.Message) {
 		Msg("Successfully returned help info")
 }
 
-func (r TelegramReporter) subscribeToValidatorUpdates(message *tb.Message) {
+func (r *TelegramReporter) subscribeToValidatorUpdates(message *tb.Message) {
 	if message.Sender.Username == "" {
 		r.sendMessage(message, "Please set your Telegram username first.")
 		return
@@ -296,12 +304,7 @@ func (r TelegramReporter) subscribeToValidatorUpdates(message *tb.Message) {
 	address := args[1]
 	log.Debug().Str("address", address).Msg("subscribeToValidatorUpdates: address")
 
-	stakingClient := stakingtypes.NewQueryClient(grpcConn)
-
-	validatorResponse, err := stakingClient.Validator(
-		context.Background(),
-		&stakingtypes.QueryValidatorRequest{ValidatorAddr: address},
-	)
+	validator, err := getValidator(address)
 
 	if err != nil {
 		log.Error().
@@ -312,15 +315,21 @@ func (r TelegramReporter) subscribeToValidatorUpdates(message *tb.Message) {
 		return
 	}
 
-	r.TelegramConfig.addNotifier(address, message.Sender.Username)
+	err = r.TelegramConfig.addNotifier(address, message.Sender.Username)
 	r.saveYamlConfig()
 
+	if err != nil {
+		r.sendMessage(message, err.Error())
+		r.saveYamlConfig()
+		return
+	}
+
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("Subscribed to the notification of <code>%s</code> ", validatorResponse.Validator.Description.Moniker))
+	sb.WriteString(fmt.Sprintf("Subscribed to the notification of <code>%s</code> ", validator.Description.Moniker))
 	sb.WriteString(fmt.Sprintf(
 		"<a href=\"https://mintscan.io/%s/validators/%s\">Mintscan</a>\n",
 		MintscanPrefix,
-		validatorResponse.Validator.OperatorAddress,
+		validator.OperatorAddress,
 	))
 
 	r.sendMessage(message, sb.String())
@@ -330,7 +339,57 @@ func (r TelegramReporter) subscribeToValidatorUpdates(message *tb.Message) {
 		Msg("Successfully subscribed to validator's notifications.")
 }
 
-func (r TelegramReporter) loadConfigFromYaml() {
+func (r *TelegramReporter) unsubscribeFromValidatorUpdates(message *tb.Message) {
+	if message.Sender.Username == "" {
+		r.sendMessage(message, "Please set your Telegram username first.")
+		return
+	}
+
+	args := strings.SplitAfterN(message.Text, " ", 2)
+	if len(args) < 2 {
+		r.sendMessage(message, "Usage: /unsubscribe &lt;validator address&gt;")
+		return
+	}
+
+	address := args[1]
+	log.Debug().Str("address", address).Msg("unsubscribeFromValidatorUpdates: address")
+
+	validator, err := getValidator(address)
+
+	if err != nil {
+		log.Error().
+			Str("address", address).
+			Err(err).
+			Msg("Could not get validator")
+		r.sendMessage(message, "Could not find validator")
+		return
+	}
+
+	err = r.TelegramConfig.removeNotifier(address, message.Sender.Username)
+	r.saveYamlConfig()
+
+	if err != nil {
+		r.sendMessage(message, err.Error())
+		r.saveYamlConfig()
+		return
+	}
+
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("Unsubscribed from the notification of <code>%s</code> ", validator.Description.Moniker))
+	sb.WriteString(fmt.Sprintf(
+		"<a href=\"https://mintscan.io/%s/validators/%s\">Mintscan</a>\n",
+		MintscanPrefix,
+		validator.OperatorAddress,
+	))
+
+	r.sendMessage(message, sb.String())
+	log.Info().
+		Str("user", message.Sender.Username).
+		Str("address", address).
+		Msg("Successfully unsubscribed from validator's notifications.")
+}
+
+func (r *TelegramReporter) loadConfigFromYaml() {
 	if _, err := os.Stat(r.TelegramConfigPath); os.IsNotExist(err) {
 		log.Info().Str("path", r.TelegramConfigPath).Msg("Telegram config file does not exist, creating.")
 		if _, err = os.Create(r.TelegramConfigPath); err != nil {
@@ -354,15 +413,69 @@ func (r TelegramReporter) loadConfigFromYaml() {
 	log.Debug().Msg("Telegram config is loaded successfully.")
 }
 
-func (r TelegramReporter) saveYamlConfig() {
-	var bytes []byte
-	if err := toml.Unmarshal(bytes, &r.TelegramConfig); err != nil {
-		log.Fatal().Err(err).Msg("Could not serialize Telegram config")
+func (r *TelegramReporter) saveYamlConfig() {
+	f, err := os.Create(r.TelegramConfigPath)
+	if err != nil {
+		log.Fatal().Err(err).Msg("Could not open Telegram config when saving")
 	}
-
-	if err := ioutil.WriteFile(r.TelegramConfigPath, bytes, 0644); err != nil {
-		log.Fatal().Err(err).Msg("Could not read Telegram config!")
+	if err := toml.NewEncoder(f).Encode(r.TelegramConfig); err != nil {
+		log.Fatal().Err(err).Msg("Could not save Telegram config")
+	}
+	if err := f.Close(); err != nil {
+		log.Fatal().Err(err).Msg("Could not close Telegram config when saving")
 	}
 
 	log.Debug().Msg("Telegram config is updated successfully.")
+}
+
+func getValidator(address string) (stakingtypes.Validator, error) {
+	stakingClient := stakingtypes.NewQueryClient(grpcConn)
+
+	validatorResponse, err := stakingClient.Validator(
+		context.Background(),
+		&stakingtypes.QueryValidatorRequest{ValidatorAddr: address},
+	)
+
+	if err != nil {
+		return stakingtypes.Validator{}, err
+	}
+
+	return validatorResponse.Validator, nil
+}
+
+func getSigningInfo(validator stakingtypes.Validator) (slashingtypes.ValidatorSigningInfo, error) {
+	slashingClient := slashingtypes.NewQueryClient(grpcConn)
+
+	err := validator.UnpackInterfaces(interfaceRegistry) // Unpack interfaces, to populate the Anys' cached values
+	if err != nil {
+		log.Error().
+			Str("address", validator.OperatorAddress).
+			Err(err).
+			Msg("Could not get unpack validator inferfaces")
+		return slashingtypes.ValidatorSigningInfo{}, err
+	}
+
+	pubKey, err := validator.GetConsAddr()
+	if err != nil {
+		log.Error().
+			Str("address", validator.OperatorAddress).
+			Err(err).
+			Msg("Could not get validator pubkey")
+		return slashingtypes.ValidatorSigningInfo{}, err
+	}
+
+	signingInfosResponse, err := slashingClient.SigningInfo(
+		context.Background(),
+		&slashingtypes.QuerySigningInfoRequest{ConsAddress: pubKey.String()},
+	)
+
+	if err != nil {
+		log.Error().
+			Str("address", validator.OperatorAddress).
+			Err(err).
+			Msg("Could not get signing info")
+		return slashingtypes.ValidatorSigningInfo{}, err
+	}
+
+	return signingInfosResponse.ValSigningInfo, nil
 }
