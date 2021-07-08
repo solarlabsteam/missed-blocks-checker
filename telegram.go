@@ -51,6 +51,17 @@ func (i *NotificationInfo) removeNotifier(notifier string) error {
 	return nil
 }
 
+func (c *TelegramConfig) getNotifiedValidators(notifier string) []string {
+	validators := []string{}
+	for _, info := range c.NotiticationInfos {
+		if stringInSlice(notifier, info.Notifiers) {
+			validators = append(validators, info.ValidatorAddress)
+		}
+	}
+
+	return validators
+}
+
 func (c *TelegramConfig) addNotifier(validatorAddress string, notifierToAdd string) error {
 	for _, notifier := range c.NotiticationInfos {
 		if notifier.ValidatorAddress == validatorAddress {
@@ -245,7 +256,7 @@ func (r TelegramReporter) getHelp(message *tb.Message) {
 func (r *TelegramReporter) getValidatorStatus(message *tb.Message) {
 	args := strings.SplitAfterN(message.Text, " ", 2)
 	if len(args) < 2 {
-		r.sendMessage(message, "Not supported yet.")
+		r.getSubscribedValidatorsStatuses(message)
 		return
 	}
 
@@ -269,6 +280,53 @@ func (r *TelegramReporter) getValidatorStatus(message *tb.Message) {
 		return
 	}
 
+	r.sendMessage(message, getValidatorWithMissedBlocksSerialized(validator, signingInfo))
+	log.Info().
+		Str("user", message.Sender.Username).
+		Str("address", address).
+		Msg("Successfully returned validator status")
+}
+
+func (r *TelegramReporter) getSubscribedValidatorsStatuses(message *tb.Message) {
+	log.Debug().Msg("getSubscribedValidatorsStatuses")
+
+	subscribedValidators := r.TelegramConfig.getNotifiedValidators(message.Sender.LastName)
+	if len(subscribedValidators) == 0 {
+		r.sendMessage(message, "You are not subscribed to any validator's missed blocks notifications.")
+		return
+	}
+
+	var sb strings.Builder
+
+	for _, address := range subscribedValidators {
+		validator, err := getValidator(address)
+
+		if err != nil {
+			log.Error().
+				Str("address", address).
+				Err(err).
+				Msg("Could not get validators")
+			r.sendMessage(message, "Could not find validator")
+			return
+		}
+
+		signingInfo, err := getSigningInfo(validator)
+		if err != nil {
+			r.sendMessage(message, "Could not get missed blocks info")
+			return
+		}
+
+		sb.WriteString(getValidatorWithMissedBlocksSerialized(validator, signingInfo))
+		sb.WriteString("\n")
+	}
+
+	r.sendMessage(message, sb.String())
+	log.Info().
+		Str("user", message.Sender.Username).
+		Msg("Successfully returned subscribed validator statuses")
+}
+
+func getValidatorWithMissedBlocksSerialized(validator stakingtypes.Validator, signingInfo slashingtypes.ValidatorSigningInfo) string {
 	var sb strings.Builder
 	sb.WriteString(fmt.Sprintf("<code>%s</code>\n", validator.Description.Moniker))
 	sb.WriteString(fmt.Sprintf(
@@ -283,10 +341,7 @@ func (r *TelegramReporter) getValidatorStatus(message *tb.Message) {
 		validator.OperatorAddress,
 	))
 
-	r.sendMessage(message, sb.String())
-	log.Info().
-		Str("user", message.Sender.Username).
-		Msg("Successfully returned help info")
+	return sb.String()
 }
 
 func (r *TelegramReporter) subscribeToValidatorUpdates(message *tb.Message) {
