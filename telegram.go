@@ -290,7 +290,7 @@ func (r *TelegramReporter) getValidatorStatus(message *tb.Message) {
 func (r *TelegramReporter) getSubscribedValidatorsStatuses(message *tb.Message) {
 	log.Debug().Msg("getSubscribedValidatorsStatuses")
 
-	subscribedValidators := r.TelegramConfig.getNotifiedValidators(message.Sender.LastName)
+	subscribedValidators := r.TelegramConfig.getNotifiedValidators(message.Sender.Username)
 	if len(subscribedValidators) == 0 {
 		r.sendMessage(message, "You are not subscribed to any validator's missed blocks notifications.")
 		return
