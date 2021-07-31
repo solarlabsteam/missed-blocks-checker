@@ -392,8 +392,12 @@ func generateReport() *Report {
 			missedBlocksDecreased += 1
 			continue
 		} else if current <= Threshold && previous > Threshold && diff < 0 {
+			log.Debug().
+				Time("jailedUntil", signingInfo.JailedUntil).
+				Msg("---- Diff is negative")
+
 			missedBlocksDecreased += 1
-			if signingInfo.JailedUntil.Local().UnixNano() < time.Now().UnixNano() { // is in the past
+			if signingInfo.JailedUntil.UnixNano() < time.Now().UnixNano() { // is in the past
 				// 6
 				Direction = WENT_BACK_TO_NORMAL
 			} else {
