@@ -392,12 +392,18 @@ func generateReport() *Report {
 			missedBlocksDecreased += 1
 			continue
 		} else if current <= Threshold && previous > Threshold && diff < 0 {
+			jailed := false
+			if found && validator.Jailed {
+				jailed = true
+			}
+
 			log.Debug().
 				Time("jailedUntil", signingInfo.JailedUntil).
+				Bool("jailed", jailed).
 				Msg("---- Diff is negative")
 
 			missedBlocksDecreased += 1
-			if signingInfo.JailedUntil.UnixNano() < time.Now().UnixNano() { // is in the past
+			if (signingInfo.JailedUntil.UnixNano() < time.Now().UnixNano()) && !jailed { // is in the past AND the validator's not jailed
 				// 6
 				Direction = WENT_BACK_TO_NORMAL
 			} else {
