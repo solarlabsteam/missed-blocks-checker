@@ -96,6 +96,7 @@ func (r SlackReporter) SendReport(report Report) error {
 	_, _, err := r.SlackClient.PostMessage(
 		r.SlackChat,
 		slack.MsgOptionText(serializedReport, false),
+		slack.MsgOptionDisableLinkUnfurl(),
 	)
 	return err
 }

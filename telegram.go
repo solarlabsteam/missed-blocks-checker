@@ -216,8 +216,9 @@ func (r TelegramReporter) sendMessage(message *tb.Message, text string) {
 		message.Chat,
 		text,
 		&tb.SendOptions{
-			ParseMode: tb.ModeHTML,
-			ReplyTo:   message,
+			ParseMode:             tb.ModeHTML,
+			ReplyTo:               message,
+			DisableWebPagePreview: true,
 		},
 	)
 
