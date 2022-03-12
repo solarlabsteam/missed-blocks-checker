@@ -220,6 +220,7 @@ func (r TelegramReporter) sendMessage(message *tb.Message, text string) {
 			ReplyTo:               message,
 			DisableWebPagePreview: true,
 		},
+		tb.NoPreview,
 	)
 
 	if err != nil {
