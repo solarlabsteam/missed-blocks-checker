@@ -203,6 +203,7 @@ func (r TelegramReporter) SendReport(report Report) error {
 		},
 		serializedReport,
 		tb.ModeHTML,
+		tb.NoPreview,
 	)
 	return err
 }
