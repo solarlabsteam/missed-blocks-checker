@@ -238,7 +238,7 @@ func (r TelegramReporter) getHelp(message *tb.Message) {
 	sb.WriteString("- /unsubscribe &lt;validator address&gt; - undo the subscription given at the previous step\n")
 	sb.WriteString("- /status &lt;validator address&gt; - get validator missed blocks\n")
 	sb.WriteString("- /status - get the missed blocks of the validator(s) you're subscribed to\n\n")
-	sb.WriteString("Created by <a href=\"https://validator.solar\">SOLAR Labs</a> with ❤️.\n")
+	sb.WriteString("Created by <a href=\"https://freak12techno.github.io\">freak12techno</a> at <a href=\"https://validator.solar\">SOLAR Labs</a> with ❤️.\n")
 	sb.WriteString("This bot is open-sourced, you can get the source code at https://github.com/solarlabsteam/missed-blocks-checker.\n\n")
 	sb.WriteString("We also maintain the following tools for Cosmos ecosystem:\n")
 	sb.WriteString("- <a href=\"https://github.com/solarlabsteam/cosmos-interacter\">cosmos-interacter</a> - a bot that can return info about Cosmos-based blockchain params.\n")
