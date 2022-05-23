@@ -511,7 +511,7 @@ func SetDefaultMissedBlocksGroups() {
 
 	percents := []float64{0, 0.5, 1, 5, 10, 25, 50, 75, 90, 100}
 	emojiStart := []string{"🟡", "🟡", "🟡", "🟠", "🟠", "🟠", "🔴", "🔴", "🔴"}
-	emojiEnd := []string{"🟢", "🟡", "🟡", "🟡", "🟠", "🟠", "🟠", "🟠"}
+	emojiEnd := []string{"🟢", "🟡", "🟡", "🟡", "🟡", "🟠", "🟠", "🟠", "🟠"}
 
 	for i := 0; i < len(percents)-1; i++ {
 		start := float64(MissedBlocksToJail) * percents[i] / 100
