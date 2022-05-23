@@ -332,6 +332,11 @@ func GetNewState() (ValidatorsState, error) {
 			continue
 		}
 
+		if !IsValidatorMonitored(validator.OperatorAddress) {
+			log.Trace().Str("address", info.Address).Msg("Not monitoring this validator, skipping.")
+			continue
+		}
+
 		newState[info.Address] = ValidatorState{
 			Address:          validator.OperatorAddress,
 			Moniker:          validator.Description.Moniker,
@@ -486,7 +491,7 @@ func SetBechPrefixes(cmd *cobra.Command) {
 	}
 }
 
-func isValidatorMonitored(address string) bool {
+func IsValidatorMonitored(address string) bool {
 	// If no args passed, we want to be notified about all validators.
 	if len(Config.IncludeValidators) == 0 && len(Config.ExcludeValidators) == 0 {
 		return true
@@ -541,10 +546,10 @@ func SetMissedBlocksToJail() {
 }
 
 func SetAvgBlockTime() {
-	latestBlock := getBlock(nil)
+	latestBlock := GetBlock(nil)
 	latestHeight := latestBlock.Height
 	beforeLatestBlockHeight := latestBlock.Height - BlocksDiffInThePast
-	beforeLatestBlock := getBlock(&beforeLatestBlockHeight)
+	beforeLatestBlock := GetBlock(&beforeLatestBlockHeight)
 
 	heightDiff := float64(latestHeight - beforeLatestBlockHeight)
 	timeDiff := latestBlock.Time.Sub(beforeLatestBlock.Time).Seconds()
@@ -559,7 +564,7 @@ func SetAvgBlockTime() {
 
 }
 
-func getBlock(height *int64) *ctypes.Block {
+func GetBlock(height *int64) *ctypes.Block {
 	client, err := tmrpc.New(Config.TendermintRpc, "/websocket")
 	if err != nil {
 		log.Fatal().Err(err).Msg("Could not create Tendermint client")
