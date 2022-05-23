@@ -211,6 +211,11 @@ func Execute(cmd *cobra.Command, args []string) {
 	SetAvgBlockTime()
 	SetMissedBlocksToJail()
 
+	if err := MissedBlockGroups.Validate(SignedBlocksWindow); err != nil {
+		log.Fatal().Err(err).Msg("MissedBlockGroups config is invalid")
+
+	}
+
 	for {
 		report := GenerateReport()
 		if report == nil || len(report.Entries) == 0 {
