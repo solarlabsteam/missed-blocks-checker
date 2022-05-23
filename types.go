@@ -89,7 +89,7 @@ func (g MissedBlocksGroups) Validate(window int64) error {
 		return fmt.Errorf("first MissedBlocksGroup's start should be 0, got %d", g[0].Start)
 	}
 
-	if g[len(g)-1].End != 0 {
+	if g[len(g)-1].End != window {
 		return fmt.Errorf("last MissedBlocksGroup's end should be %d, got %d", g[len(g)-1].End, window)
 	}
 
