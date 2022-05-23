@@ -267,6 +267,8 @@ func GenerateReport() *Report {
 		entries = append(entries, *entry)
 	}
 
+	State = newState
+
 	return &Report{Entries: entries}
 }
 
