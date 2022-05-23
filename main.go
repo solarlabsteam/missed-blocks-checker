@@ -39,7 +39,7 @@ var (
 	MissedBlockGroups MissedBlocksGroups = []MissedBlocksGroup{
 		{
 			Start:      0,
-			End:        100,
+			End:        99,
 			EmojiStart: "🟡",
 			EmojiEnd:   "🟢",
 			DescStart:  "is skipping blocks (< 1%)",
@@ -47,7 +47,7 @@ var (
 		},
 		{
 			Start:      100,
-			End:        500,
+			End:        499,
 			EmojiStart: "🟡",
 			EmojiEnd:   "🟡",
 			DescStart:  "is skipping blocks (> 1%)",
@@ -55,7 +55,7 @@ var (
 		},
 		{
 			Start:      500,
-			End:        1000,
+			End:        999,
 			EmojiStart: "🟡",
 			EmojiEnd:   "🟡",
 			DescStart:  "is skipping blocks (> 5%)",
@@ -63,7 +63,7 @@ var (
 		},
 		{
 			Start:      1000,
-			End:        2500,
+			End:        2499,
 			EmojiStart: "🟠",
 			EmojiEnd:   "🟡",
 			DescStart:  "is skipping blocks (> 10%)",
@@ -71,7 +71,7 @@ var (
 		},
 		{
 			Start:      2500,
-			End:        5000,
+			End:        4999,
 			EmojiStart: "🟠",
 			EmojiEnd:   "🟡",
 			DescStart:  "is skipping blocks (> 25%)",
@@ -79,7 +79,7 @@ var (
 		},
 		{
 			Start:      5000,
-			End:        7500,
+			End:        7499,
 			EmojiStart: "🔴",
 			EmojiEnd:   "🟠",
 			DescStart:  "is skipping blocks (> 50%)",
@@ -87,7 +87,7 @@ var (
 		},
 		{
 			Start:      7500,
-			End:        9000,
+			End:        8999,
 			EmojiStart: "🔴",
 			EmojiEnd:   "🟠",
 			DescStart:  "is skipping blocks (> 75%)",
