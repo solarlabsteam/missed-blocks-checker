@@ -144,7 +144,6 @@ func (r *TelegramReporter) Init() {
 		Token:  Config.TelegramToken,
 		Poller: &tb.LongPoller{Timeout: 10 * time.Second},
 	})
-
 	if err != nil {
 		log.Warn().Err(err).Msg("Could not create Telegram bot")
 		return
@@ -193,7 +192,6 @@ func (r TelegramReporter) sendMessage(message *tb.Message, text string) {
 		},
 		tb.NoPreview,
 	)
-
 	if err != nil {
 		log.Error().Err(err).Msg("Could not send Telegram message")
 	}
@@ -237,7 +235,6 @@ func (r *TelegramReporter) getValidatorStatus(message *tb.Message) {
 	log.Debug().Str("address", address).Msg("getValidatorStatus: address")
 
 	validator, err := getValidator(address)
-
 	if err != nil {
 		log.Error().
 			Str("address", address).
@@ -273,7 +270,6 @@ func (r *TelegramReporter) getSubscribedValidatorsStatuses(message *tb.Message) 
 
 	for _, address := range subscribedValidators {
 		validator, err := getValidator(address)
-
 		if err != nil {
 			log.Error().
 				Str("address", address).
@@ -333,7 +329,6 @@ func (r *TelegramReporter) subscribeToValidatorUpdates(message *tb.Message) {
 	log.Debug().Str("address", address).Msg("subscribeToValidatorUpdates: address")
 
 	validator, err := getValidator(address)
-
 	if err != nil {
 		log.Error().
 			Str("address", address).
@@ -383,7 +378,6 @@ func (r *TelegramReporter) unsubscribeFromValidatorUpdates(message *tb.Message) 
 	log.Debug().Str("address", address).Msg("unsubscribeFromValidatorUpdates: address")
 
 	validator, err := getValidator(address)
-
 	if err != nil {
 		log.Error().
 			Str("address", address).
@@ -463,7 +457,6 @@ func getValidator(address string) (stakingtypes.Validator, error) {
 		context.Background(),
 		&stakingtypes.QueryValidatorRequest{ValidatorAddr: address},
 	)
-
 	if err != nil {
 		return stakingtypes.Validator{}, err
 	}
@@ -496,7 +489,6 @@ func getSigningInfo(validator stakingtypes.Validator) (slashingtypes.ValidatorSi
 		context.Background(),
 		&slashingtypes.QuerySigningInfoRequest{ConsAddress: pubKey.String()},
 	)
-
 	if err != nil {
 		log.Error().
 			Str("address", validator.OperatorAddress).

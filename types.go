@@ -79,7 +79,7 @@ type MissedBlocksGroups []MissedBlocksGroup
 // covering each interval.
 // Example (start - end), given that window = 300:
 // 0 - 99, 100 - 199, 200 - 300 - valid
-// 0 - 50 - not valid
+// 0 - 50 - not valid.
 func (g MissedBlocksGroups) Validate(window int64) error {
 	if len(g) == 0 {
 		return fmt.Errorf("MissedBlocksGroups is empty")
@@ -89,8 +89,8 @@ func (g MissedBlocksGroups) Validate(window int64) error {
 		return fmt.Errorf("first MissedBlocksGroup's start should be 0, got %d", g[0].Start)
 	}
 
-	if g[len(g)-1].End != window {
-		return fmt.Errorf("last MissedBlocksGroup's end should be %d, got %d", g[len(g)-1].End, window)
+	if g[len(g)-1].End < window {
+		return fmt.Errorf("last MissedBlocksGroup's end should be >= %d, got %d", g[len(g)-1].End, window)
 	}
 
 	for i := 0; i < len(g)-1; i++ {

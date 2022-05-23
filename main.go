@@ -36,80 +36,17 @@ var (
 	grpcConn *grpc.ClientConn
 
 	State             ValidatorsState    = make(map[string]ValidatorState)
-	MissedBlockGroups MissedBlocksGroups = []MissedBlocksGroup{
-		{
-			Start:      0,
-			End:        99,
-			EmojiStart: "🟡",
-			EmojiEnd:   "🟢",
-			DescStart:  "is skipping blocks (< 1%)",
-			DescEnd:    "recovered (< 1%)",
-		},
-		{
-			Start:      100,
-			End:        499,
-			EmojiStart: "🟡",
-			EmojiEnd:   "🟡",
-			DescStart:  "is skipping blocks (> 1%)",
-			DescEnd:    "recovering (< 5%)",
-		},
-		{
-			Start:      500,
-			End:        999,
-			EmojiStart: "🟡",
-			EmojiEnd:   "🟡",
-			DescStart:  "is skipping blocks (> 5%)",
-			DescEnd:    "recovering (< 10%)",
-		},
-		{
-			Start:      1000,
-			End:        2499,
-			EmojiStart: "🟠",
-			EmojiEnd:   "🟡",
-			DescStart:  "is skipping blocks (> 10%)",
-			DescEnd:    "recovering (< 25%)",
-		},
-		{
-			Start:      2500,
-			End:        4999,
-			EmojiStart: "🟠",
-			EmojiEnd:   "🟡",
-			DescStart:  "is skipping blocks (> 25%)",
-			DescEnd:    "recovering (< 50%)",
-		},
-		{
-			Start:      5000,
-			End:        7499,
-			EmojiStart: "🔴",
-			EmojiEnd:   "🟠",
-			DescStart:  "is skipping blocks (> 50%)",
-			DescEnd:    "recovering (< 75%)",
-		},
-		{
-			Start:      7500,
-			End:        8999,
-			EmojiStart: "🔴",
-			EmojiEnd:   "🟠",
-			DescStart:  "is skipping blocks (> 75%)",
-			DescEnd:    "recovering (< 90%)",
-		},
-		{
-			Start:      9000,
-			End:        10000,
-			EmojiStart: "🔴",
-			EmojiEnd:   "🟠",
-			DescStart:  "is skipping blocks (> 90%)",
-			DescEnd:    "recovering (< 90%)",
-		},
-	}
+	MissedBlockGroups MissedBlocksGroups = []MissedBlocksGroup{}
 )
 
 var reporters []Reporter
 
 var log = zerolog.New(zerolog.ConsoleWriter{Out: os.Stdout}).With().Timestamp().Logger()
 
-var encCfg = simapp.MakeTestEncodingConfig()
-var interfaceRegistry = encCfg.InterfaceRegistry
+var (
+	encCfg            = simapp.MakeTestEncodingConfig()
+	interfaceRegistry = encCfg.InterfaceRegistry
+)
 
 var rootCmd = &cobra.Command{
 	Use:  "missed-blocks-checker",
@@ -210,10 +147,14 @@ func Execute(cmd *cobra.Command, args []string) {
 
 	SetAvgBlockTime()
 	SetMissedBlocksToJail()
+	SetDefaultMissedBlocksGroups()
 
-	if err := MissedBlockGroups.Validate(SignedBlocksWindow); err != nil {
+	log.Info().
+		Str("groups", fmt.Sprintf("%+v", MissedBlockGroups)).
+		Msg("Using the following MissedBlocksGroups")
+
+	if err := MissedBlockGroups.Validate(MissedBlocksToJail); err != nil {
 		log.Fatal().Err(err).Msg("MissedBlockGroups config is invalid")
-
 	}
 
 	for {
@@ -290,7 +231,6 @@ func GetNewState() (ValidatorsState, error) {
 			},
 		},
 	)
-
 	if err != nil {
 		log.Error().Err(err).Msg("Could not query for signing info")
 		return nil, err
@@ -305,7 +245,6 @@ func GetNewState() (ValidatorsState, error) {
 			},
 		},
 	)
-
 	if err != nil {
 		log.Error().Err(err).Msg("Could not query for validators")
 		return nil, err
@@ -524,7 +463,6 @@ func SetMissedBlocksToJail() {
 		context.Background(),
 		&slashingtypes.QueryParamsRequest{},
 	)
-
 	if err != nil {
 		log.Fatal().Err(err).Msg("Could not query for slashing params")
 	}
@@ -561,6 +499,33 @@ func SetAvgBlockTime() {
 		Float64("timeDiff", timeDiff).
 		Float64("avgBlockTime", AvgBlockTime).
 		Msg("Average block time calculated")
+}
+
+func SetDefaultMissedBlocksGroups() {
+	if len(MissedBlockGroups) > 0 {
+		log.Debug().Msg("MissedBlockGroups is set, not setting the default ones.")
+		return
+	}
+
+	groups := []MissedBlocksGroup{}
+
+	percents := []float64{0, 0.5, 1, 5, 10, 25, 50, 75, 90, 100}
+	emojiStart := []string{"🟡", "🟡", "🟡", "🟠", "🟠", "🟠", "🔴", "🔴", "🔴"}
+	emojiEnd := []string{"🟢", "🟡", "🟡", "🟡", "🟠", "🟠", "🟠", "🟠"}
+
+	for i := 0; i < len(percents)-1; i++ {
+		start := float64(MissedBlocksToJail) * percents[i] / 100
+		end := float64(MissedBlocksToJail) * percents[i+1] / 100
+
+		groups = append(groups, MissedBlocksGroup{
+			Start:      int64(start),
+			End:        int64(end),
+			EmojiStart: emojiStart[i],
+			EmojiEnd:   emojiEnd[i],
+			DescStart:  fmt.Sprintf("is skipping blocks (> %.1f)", percents[i+1]),
+			DescEnd:    fmt.Sprintf("is recovering (< %.1f)", percents[i]),
+		})
+	}
 
 }
 
