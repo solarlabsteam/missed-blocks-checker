@@ -341,7 +341,7 @@ func GetNewState() (ValidatorsState, error) {
 }
 
 func GetValidatorReportEntry(oldState, newState ValidatorState) (*ReportEntry, bool) {
-	log.Debug().
+	log.Trace().
 		Str("oldState", fmt.Sprintf("%+v", oldState)).
 		Str("newState", fmt.Sprintf("%+v", newState)).
 		Msg("Processing validator report entry")
