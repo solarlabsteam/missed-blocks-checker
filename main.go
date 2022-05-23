@@ -507,6 +507,8 @@ func SetDefaultMissedBlocksGroups() {
 		return
 	}
 
+	totalRange := float64(MissedBlocksToJail) + 1 // from 0 till max blocks allowed, including
+
 	groups := []MissedBlocksGroup{}
 
 	percents := []float64{0, 0.5, 1, 5, 10, 25, 50, 75, 90, 100}
@@ -514,8 +516,8 @@ func SetDefaultMissedBlocksGroups() {
 	emojiEnd := []string{"🟢", "🟡", "🟡", "🟡", "🟡", "🟠", "🟠", "🟠", "🟠"}
 
 	for i := 0; i < len(percents)-1; i++ {
-		start := float64(MissedBlocksToJail) * percents[i] / 100
-		end := float64(MissedBlocksToJail)*percents[i+1]/100 - 1
+		start := totalRange * percents[i] / 100
+		end := totalRange*percents[i+1]/100 - 1
 
 		groups = append(groups, MissedBlocksGroup{
 			Start:      int64(start),
