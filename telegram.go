@@ -103,59 +103,29 @@ func (r TelegramReporter) Serialize(report Report) string {
 
 	for _, entry := range report.Entries {
 		var (
-			emoji         string
-			status        string
 			validatorLink string
 			timeToJail    string = ""
 		)
 
 		switch entry.Direction {
-		case START_MISSING_BLOCKS:
-			emoji = "🚨"
-			status = "is missing blocks"
+		case INCREASING:
 			timeToJail = fmt.Sprintf(" (%s till jail)", entry.GetTimeToJail())
-		case MISSING_BLOCKS:
-			emoji = "🔴"
-			status = "is missing blocks"
-			timeToJail = fmt.Sprintf(" (%s till jail)", entry.GetTimeToJail())
-		case STOPPED_MISSING_BLOCKS:
-			emoji = "🟡"
-			status = "stopped missing blocks"
-		case WENT_BACK_TO_NORMAL:
-			emoji = "🟢"
-			status = "went back to normal"
-		case JAILED:
-			emoji = "❌"
-			status = "was jailed"
 		}
 
-		if entry.ValidatorAddress != "" && entry.ValidatorMoniker != "" {
-			validatorLink = fmt.Sprintf(
-				"<a href=\"https://www.mintscan.io/%s/validators/%s\">%s</a>",
-				MintscanPrefix,
-				entry.ValidatorAddress,
-				entry.ValidatorMoniker,
-			)
-		} else if entry.ValidatorMoniker == "" { // validator with empty moniker, can happen
-			validatorLink = fmt.Sprintf(
-				"<a href=\"https://www.mintscan.io/%s/validators/%s\">%s</a>",
-				MintscanPrefix,
-				entry.ValidatorAddress,
-				entry.ValidatorAddress,
-			)
-		} else {
-			validatorLink = fmt.Sprintf("<code>%s</code>", entry.Pubkey)
-		}
+		validatorLink = fmt.Sprintf(
+			"<a href=\"https://www.mintscan.io/%s/validators/%s\">%s</a>",
+			Config.MintscanPrefix,
+			entry.ValidatorAddress,
+			entry.ValidatorMoniker,
+		)
 
 		notifiers := r.TelegramConfig.getNotifiersSerialized(entry.ValidatorAddress)
 
 		sb.WriteString(fmt.Sprintf(
-			"%s <strong>%s %s</strong>: %d -> %d%s %s\n",
-			emoji,
+			"%s <strong>%s</strong> %s%s %s\n",
+			entry.Emoji,
 			validatorLink,
-			status,
-			entry.BeforeBlocksMissing,
-			entry.NowBlocksMissing,
+			entry.Description,
 			timeToJail,
 			notifiers,
 		))
@@ -171,7 +141,7 @@ func (r *TelegramReporter) Init() {
 	}
 
 	bot, err := tb.NewBot(tb.Settings{
-		Token:  TelegramToken,
+		Token:  Config.TelegramToken,
 		Poller: &tb.LongPoller{Timeout: 10 * time.Second},
 	})
 
@@ -232,7 +202,7 @@ func (r TelegramReporter) sendMessage(message *tb.Message, text string) {
 func (r TelegramReporter) getHelp(message *tb.Message) {
 	var sb strings.Builder
 	sb.WriteString("<strong>missed-block-checker</strong>\n\n")
-	sb.WriteString(fmt.Sprintf("Query for the %s network info.\n", MintscanPrefix))
+	sb.WriteString(fmt.Sprintf("Query for the %s network info.\n", Config.MintscanPrefix))
 	sb.WriteString("Can understand the following commands:\n")
 	sb.WriteString("- /subscribe &lt;validator address&gt; - be notified on validator's missed block in a Telegram channel\n")
 	sb.WriteString("- /unsubscribe &lt;validator address&gt; - undo the subscription given at the previous step\n")
@@ -340,7 +310,7 @@ func getValidatorWithMissedBlocksSerialized(validator stakingtypes.Validator, si
 	))
 	sb.WriteString(fmt.Sprintf(
 		"<a href=\"https://mintscan.io/%s/validators/%s\">Mintscan</a>\n",
-		MintscanPrefix,
+		Config.MintscanPrefix,
 		validator.OperatorAddress,
 	))
 
@@ -386,7 +356,7 @@ func (r *TelegramReporter) subscribeToValidatorUpdates(message *tb.Message) {
 	sb.WriteString(fmt.Sprintf("Subscribed to the notification of <code>%s</code> ", validator.Description.Moniker))
 	sb.WriteString(fmt.Sprintf(
 		"<a href=\"https://mintscan.io/%s/validators/%s\">Mintscan</a>\n",
-		MintscanPrefix,
+		Config.MintscanPrefix,
 		validator.OperatorAddress,
 	))
 
@@ -436,7 +406,7 @@ func (r *TelegramReporter) unsubscribeFromValidatorUpdates(message *tb.Message) 
 	sb.WriteString(fmt.Sprintf("Unsubscribed from the notification of <code>%s</code> ", validator.Description.Moniker))
 	sb.WriteString(fmt.Sprintf(
 		"<a href=\"https://mintscan.io/%s/validators/%s\">Mintscan</a>\n",
-		MintscanPrefix,
+		Config.MintscanPrefix,
 		validator.OperatorAddress,
 	))
 

@@ -26,29 +26,7 @@ import (
 )
 
 var (
-	ConfigPath     string
-	NodeAddress    string
-	LogLevel       string
-	Interval       int
-	Threshold      int64
-	Limit          uint64
-	MintscanPrefix string
-	TendermintRpc  string
-
-	TelegramToken      string
-	TelegramConfigPath string
-	TelegramChat       int
-	SlackToken         string
-	SlackChat          string
-
-	Prefix                    string
-	ValidatorPrefix           string
-	ValidatorPubkeyPrefix     string
-	ConsensusNodePrefix       string
-	ConsensusNodePubkeyPrefix string
-
-	IncludeValidators []string
-	ExcludeValidators []string
+	Config AppConfig
 
 	BlocksDiffInThePast int64 = 100
 	AvgBlockTime        float64
@@ -56,16 +34,79 @@ var (
 	MissedBlocksToJail  int64
 
 	grpcConn *grpc.ClientConn
+
+	State             ValidatorsState    = make(map[string]ValidatorState)
+	MissedBlockGroups MissedBlocksGroups = []MissedBlocksGroup{
+		{
+			Start:      0,
+			End:        100,
+			EmojiStart: "🟡",
+			EmojiEnd:   "🟢",
+			DescStart:  "is skipping blocks (< 1%)",
+			DescEnd:    "recovered (< 1%)",
+		},
+		{
+			Start:      100,
+			End:        500,
+			EmojiStart: "🟡",
+			EmojiEnd:   "🟡",
+			DescStart:  "is skipping blocks (> 1%)",
+			DescEnd:    "recovering (< 5%)",
+		},
+		{
+			Start:      500,
+			End:        1000,
+			EmojiStart: "🟡",
+			EmojiEnd:   "🟡",
+			DescStart:  "is skipping blocks (> 5%)",
+			DescEnd:    "recovering (< 10%)",
+		},
+		{
+			Start:      1000,
+			End:        2500,
+			EmojiStart: "🟠",
+			EmojiEnd:   "🟡",
+			DescStart:  "is skipping blocks (> 10%)",
+			DescEnd:    "recovering (< 25%)",
+		},
+		{
+			Start:      2500,
+			End:        5000,
+			EmojiStart: "🟠",
+			EmojiEnd:   "🟡",
+			DescStart:  "is skipping blocks (> 25%)",
+			DescEnd:    "recovering (< 50%)",
+		},
+		{
+			Start:      5000,
+			End:        7500,
+			EmojiStart: "🔴",
+			EmojiEnd:   "🟠",
+			DescStart:  "is skipping blocks (> 50%)",
+			DescEnd:    "recovering (< 75%)",
+		},
+		{
+			Start:      7500,
+			End:        9000,
+			EmojiStart: "🔴",
+			EmojiEnd:   "🟠",
+			DescStart:  "is skipping blocks (> 75%)",
+			DescEnd:    "recovering (< 90%)",
+		},
+		{
+			Start:      9000,
+			End:        10000,
+			EmojiStart: "🔴",
+			EmojiEnd:   "🟠",
+			DescStart:  "is skipping blocks (> 90%)",
+			DescEnd:    "recovering (< 90%)",
+		},
+	}
 )
 
 var reporters []Reporter
 
 var log = zerolog.New(zerolog.ConsoleWriter{Out: os.Stdout}).With().Timestamp().Logger()
-
-var beforePreviousInfos []slashingtypes.ValidatorSigningInfo
-var previousInfos []slashingtypes.ValidatorSigningInfo
-
-var validators []stakingtypes.Validator
 
 var encCfg = simapp.MakeTestEncodingConfig()
 var interfaceRegistry = encCfg.InterfaceRegistry
@@ -74,15 +115,15 @@ var rootCmd = &cobra.Command{
 	Use:  "missed-blocks-checker",
 	Long: "Tool to monitor missed blocks for Cosmos-chain validators",
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
-		if ConfigPath == "" {
+		if Config.ConfigPath == "" {
 			log.Trace().Msg("No config file provided, skipping")
-			setBechPrefixes(cmd)
+			SetBechPrefixes(cmd)
 			return nil
 		}
 
 		log.Trace().Msg("Config file provided")
 
-		viper.SetConfigFile(ConfigPath)
+		viper.SetConfigFile(Config.ConfigPath)
 		if err := viper.ReadInConfig(); err != nil {
 			log.Info().Err(err).Msg("Error reading config file")
 			if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
@@ -100,7 +141,7 @@ var rootCmd = &cobra.Command{
 			}
 		})
 
-		setBechPrefixes(cmd)
+		SetBechPrefixes(cmd)
 
 		return nil
 	},
@@ -108,7 +149,7 @@ var rootCmd = &cobra.Command{
 }
 
 func Execute(cmd *cobra.Command, args []string) {
-	logLevel, err := zerolog.ParseLevel(LogLevel)
+	logLevel, err := zerolog.ParseLevel(Config.LogLevel)
 	if err != nil {
 		log.Fatal().Err(err).Msg("Could not parse log level")
 	}
@@ -116,47 +157,39 @@ func Execute(cmd *cobra.Command, args []string) {
 	zerolog.SetGlobalLevel(logLevel)
 
 	config := sdk.GetConfig()
-	config.SetBech32PrefixForValidator(ValidatorPrefix, ValidatorPubkeyPrefix)
-	config.SetBech32PrefixForConsensusNode(ConsensusNodePrefix, ConsensusNodePubkeyPrefix)
+	config.SetBech32PrefixForValidator(Config.ValidatorPrefix, Config.ValidatorPubkeyPrefix)
+	config.SetBech32PrefixForConsensusNode(Config.ConsensusNodePrefix, Config.ConsensusNodePubkeyPrefix)
 	config.Seal()
 
 	log.Info().
-		Str("--node", NodeAddress).
-		Str("--log-level", LogLevel).
-		Int("--interval", Interval).
-		Int64("--threshold", Threshold).
-		Uint64("--limit", Limit).
-		Str("--bech-validator-prefix", ValidatorPrefix).
-		Str("--bech-validator-pubkey-prefix", ValidatorPubkeyPrefix).
-		Str("--bech-consensus-node-prefix", ConsensusNodePrefix).
-		Str("--bech-consensus-node-pubkey-prefix", ConsensusNodePubkeyPrefix).
+		Str("config", fmt.Sprintf("%+v", Config)).
 		Msg("Started with following parameters")
 
-	if len(IncludeValidators) != 0 && len(ExcludeValidators) != 0 {
+	if len(Config.IncludeValidators) != 0 && len(Config.ExcludeValidators) != 0 {
 		log.Fatal().Msg("Cannot use --include and --exclude at the same time!")
 	}
 
-	if len(IncludeValidators) == 0 && len(ExcludeValidators) == 0 {
+	if len(Config.IncludeValidators) == 0 && len(Config.ExcludeValidators) == 0 {
 		log.Info().Msg("Monitoring all validators")
-	} else if len(IncludeValidators) != 0 {
+	} else if len(Config.IncludeValidators) != 0 {
 		log.Info().
-			Strs("validators", IncludeValidators).
+			Strs("validators", Config.IncludeValidators).
 			Msg("Monitoring specific validators")
 	} else {
 		log.Info().
-			Strs("validators", ExcludeValidators).
+			Strs("validators", Config.ExcludeValidators).
 			Msg("Monitoring all validators except specific")
 	}
 
 	reporters = []Reporter{
 		&TelegramReporter{
-			TelegramToken:      TelegramToken,
-			TelegramChat:       TelegramChat,
-			TelegramConfigPath: TelegramConfigPath,
+			TelegramToken:      Config.TelegramToken,
+			TelegramChat:       Config.TelegramChat,
+			TelegramConfigPath: Config.TelegramConfigPath,
 		},
 		&SlackReporter{
-			SlackToken: SlackToken,
-			SlackChat:  SlackChat,
+			SlackToken: Config.SlackToken,
+			SlackChat:  Config.SlackChat,
 		},
 	}
 
@@ -166,7 +199,7 @@ func Execute(cmd *cobra.Command, args []string) {
 	}
 
 	grpcConn, err = grpc.Dial(
-		NodeAddress,
+		Config.NodeAddress,
 		grpc.WithInsecure(),
 	)
 	if err != nil {
@@ -175,14 +208,14 @@ func Execute(cmd *cobra.Command, args []string) {
 
 	defer grpcConn.Close()
 
-	setAvgBlockTime()
-	setMissedBlocksToJail()
+	SetAvgBlockTime()
+	SetMissedBlocksToJail()
 
 	for {
-		report := generateReport()
+		report := GenerateReport()
 		if report == nil || len(report.Entries) == 0 {
 			log.Info().Msg("Report is empty, not sending.")
-			time.Sleep(time.Duration(Interval) * time.Second)
+			time.Sleep(time.Duration(Config.Interval) * time.Second)
 			continue
 		}
 
@@ -198,29 +231,61 @@ func Execute(cmd *cobra.Command, args []string) {
 			}
 		}
 
-		time.Sleep(time.Duration(Interval) * time.Second)
+		time.Sleep(time.Duration(Config.Interval) * time.Second)
 	}
 }
 
-func generateReport() *Report {
-	report := Report{Entries: []ReportEntry{}}
+func GenerateReport() *Report {
+	if len(State) == 0 {
+		log.Info().Msg("No previous state, skipping.")
+		return &Report{}
+	}
 
-	log.Trace().Msg("=============== Request start =================")
-	defer log.Trace().Msg("=============== Request end =================")
+	newState, err := GetNewState()
+	if err != nil {
+		log.Error().Err(err).Msg("Error getting new state")
+		return &Report{}
+	}
+
+	entries := []ReportEntry{}
+
+	for address, info := range newState {
+		oldState, ok := State[address]
+		if !ok {
+			log.Warn().Str("address", address).Msg("No old state present for address")
+			continue
+		}
+
+		entry, present := GetValidatorReportEntry(oldState, info)
+		if !present {
+			log.Debug().
+				Str("address", address).
+				Msg("No report entry present")
+			continue
+		}
+
+		entries = append(entries, *entry)
+	}
+
+	return &Report{Entries: entries}
+}
+
+func GetNewState() (ValidatorsState, error) {
+	log.Debug().Msg("Querying for signing infos...")
 
 	slashingClient := slashingtypes.NewQueryClient(grpcConn)
 	signingInfos, err := slashingClient.SigningInfos(
 		context.Background(),
 		&slashingtypes.QuerySigningInfosRequest{
 			Pagination: &querytypes.PageRequest{
-				Limit: Limit,
+				Limit: Config.Limit,
 			},
 		},
 	)
 
 	if err != nil {
 		log.Error().Err(err).Msg("Could not query for signing info")
-		return nil
+		return nil, err
 	}
 
 	stakingClient := stakingtypes.NewQueryClient(grpcConn)
@@ -228,275 +293,200 @@ func generateReport() *Report {
 		context.Background(),
 		&stakingtypes.QueryValidatorsRequest{
 			Pagination: &querytypes.PageRequest{
-				Limit: Limit,
+				Limit: Config.Limit,
 			},
 		},
 	)
 
 	if err != nil {
 		log.Error().Err(err).Msg("Could not query for validators")
-		return nil
+		return nil, err
 	}
 
-	validators = validatorsResult.Validators
-
-	log.Trace().Msg("Validators list:")
-	for _, signingInfo := range signingInfos.Info {
-		log.Trace().
-			Str("address", signingInfo.Address).
-			Int64("startHeight", signingInfo.StartHeight).
-			Int64("missedBlocks", signingInfo.MissedBlocksCounter).
-			Msg("-- Validator info")
-	}
-
-	if previousInfos == nil {
-		log.Info().Msg("Previous infos is empty, first start. No checking difference")
-		previousInfos = signingInfos.Info
-		return nil
-	}
-
-	missedBlocksIncreased := 0
-	missedBlocksDecreased := 0
-	missedBlocksNotChanged := 0
-	missedBlocksBelowThreshold := 0
-
-	log.Debug().Msg("Processing validators")
-	for _, signingInfo := range signingInfos.Info {
-		log.Debug().Str("pubkey", signingInfo.Address).Msg("-- Validator info")
-		var previousInfo slashingtypes.ValidatorSigningInfo
-		previousInfoFound := false
-		for _, previousInfoIterated := range previousInfos {
-			if previousInfoIterated.Address == signingInfo.Address {
-				previousInfo = previousInfoIterated
-				previousInfoFound = true
-				break
-			}
+	validatorsMap := make(map[string]stakingtypes.Validator, len(validatorsResult.Validators))
+	for _, validator := range validatorsResult.Validators {
+		err := validator.UnpackInterfaces(interfaceRegistry)
+		if err != nil {
+			log.Error().Err(err).Msg("Could not unpack interface")
+			return nil, err
 		}
 
-		if !previousInfoFound {
-			log.Debug().Str("address", signingInfo.Address).Msg("---- Could not find previous info")
+		pubKey, err := validator.GetConsAddr()
+		validatorsMap[pubKey.String()] = validator
+	}
+
+	newState := make(ValidatorsState, len(signingInfos.Info))
+
+	for _, info := range signingInfos.Info {
+		validator, ok := validatorsMap[info.Address]
+		if !ok {
+			log.Warn().Str("address", info.Address).Msg("Could not find validator by pubkey")
 			continue
 		}
 
-		// if it's zero - validator hasn't missed any blocks since last check
-		// if it's > 0 - validator has missed some blocks since last check
-		// if it's < 0 - validator has missed some blocks in the past
-		// but the window is moving and they are not missing blocks now.
-		previous := previousInfo.MissedBlocksCounter
-		current := signingInfo.MissedBlocksCounter
-		diff := current - previous
-
-		var (
-			ValidatorAddress string
-			ValidatorMoniker string
-			Pubkey           string = signingInfo.Address
-			Direction        Direction
-		)
-
-		// somehow not all the validators info is returned
-		validator, found := findValidator(signingInfo.Address)
-		if found {
-			log.Debug().Str("address", validator.OperatorAddress).Msg("---- Found validator for pubkey")
-
-			if !isValidatorMonitored(validator.OperatorAddress) {
-				log.Debug().Msg("---- Not monitoring this validator.")
-				continue
-			}
-
-			ValidatorAddress = validator.OperatorAddress
-			ValidatorMoniker = validator.Description.Moniker
-		} else {
-			// If monitoring all validators or all validators except specific ones,
-			// we want to be notified also about those where we cannot get the validator info,
-			// if monitoring specific valdators - we want to skip these
-			if len(IncludeValidators) != 0 {
-				log.Debug().Msg("---- No pubkey info, monitoring specific validators - skipping.")
-				continue
-			}
-
-			log.Debug().Str("address", signingInfo.Address).Msg("---- Could not find validator for pubkey")
+		newState[info.Address] = ValidatorState{
+			Address:          validator.OperatorAddress,
+			Moniker:          validator.Description.Moniker,
+			ConsensusAddress: info.Address,
+			MissedBlocks:     info.MissedBlocksCounter,
+			Jailed:           validator.Jailed,
+			Tombstoned:       info.Tombstoned,
 		}
-
-		if current <= Threshold && previous <= Threshold {
-			missedBlocksBelowThreshold += 1
-			continue
-		}
-
-		log.Debug().
-			Str("address", signingInfo.Address).
-			Int64("missedBlocks", diff).
-			Int64("before", previous).
-			Int64("after", current).
-			Msg("---- Validator diff with previous state")
-
-		// Possible cases:
-		// 1) previous state < threshold, current state < threshold - validator is not missing blocks, ignoring
-		// 2) previous state < threshold, current state > threshold - validator started missing blocks
-		// 3) previous state > threshold, current state > threshold, diff > 0 - validator is still missing blocks
-		// 4) previous state > threshold, current state > threshold, diff == 0 - validator stopped missing blocks
-		// 5) previous state > threshold, current state > threshold, diff < 0 - window is moving
-		// 6) previous state > threshold, current state < threshold - window moved, validator is back to normal
-		// 7) previous state > threshold, current state < threshold - validator was jailed
-
-		if current > Threshold && previous <= Threshold {
-			// 2
-			Direction = START_MISSING_BLOCKS
-			log.Debug().Msg("---- Validator started missing blocks")
-			missedBlocksIncreased += 1
-		} else if current > Threshold && previous > Threshold && diff > 0 {
-			// 3
-			Direction = MISSING_BLOCKS
-			log.Debug().Msg("---- Validator is still missing blocks")
-			missedBlocksIncreased += 1
-		} else if current > Threshold && previous > Threshold && diff == 0 {
-			// 4
-			// This is where it gets crazy: we need to check not the previous state,
-			// but the one before it, to see if we've sent any notifications redarding that.
-			log.Debug().Msg("---- Validator stopped missing blocks")
-			missedBlocksNotChanged += 1
-
-			var beforePreviousInfo slashingtypes.ValidatorSigningInfo
-			beforePreviousInfoFound := false
-			for _, beforePreviousInfoIterated := range beforePreviousInfos {
-				if beforePreviousInfoIterated.Address == signingInfo.Address {
-					beforePreviousInfo = beforePreviousInfoIterated
-					beforePreviousInfoFound = true
-					break
-				}
-			}
-
-			if !beforePreviousInfoFound {
-				log.Debug().Msg("---- Could not find before previous info")
-				continue
-			}
-
-			// Now, if current diff is zero, but diff between previous and before previous is above zero,
-			// that means we haven't sent a notification so far, and should do it.
-			// If previous diff is negative, that means the window has moved, and we won't need to notify.
-			// If previous diff is zero, everything is stable, no need to send notifications as well.
-			previousDiff := previousInfo.MissedBlocksCounter - beforePreviousInfo.MissedBlocksCounter
-			if previousDiff == 0 {
-				log.Debug().Msg("---- Previous diff == 0, notification already sent.")
-				continue
-			} else if previousDiff < 0 {
-				log.Debug().Msg("---- Previous diff < 0, not sending notification.")
-				continue
-			} else {
-				log.Debug().Msg("---- Previous diff > 0, sending notification.")
-			}
-
-			Direction = STOPPED_MISSING_BLOCKS
-		} else if current > Threshold && previous > Threshold && diff < 0 {
-			// 5
-			log.Debug().Msg("---- Window is moving, diff is negative")
-			missedBlocksDecreased += 1
-			continue
-		} else if current <= Threshold && previous > Threshold && diff < 0 {
-			jailed := false
-			if found && validator.Jailed {
-				jailed = true
-			}
-
-			log.Debug().
-				Time("jailedUntil", signingInfo.JailedUntil).
-				Bool("jailed", jailed).
-				Msg("---- Diff is negative")
-
-			missedBlocksDecreased += 1
-			if (signingInfo.JailedUntil.UnixNano() < time.Now().UnixNano()) && !jailed { // is in the past AND the validator's not jailed
-				// 6
-				Direction = WENT_BACK_TO_NORMAL
-			} else {
-				// 7
-				Direction = JAILED
-			}
-		} else {
-			log.Fatal().Msg("Unexpected state")
-		}
-
-		report.Entries = append(report.Entries, ReportEntry{
-			ValidatorAddress:    ValidatorAddress,
-			ValidatorMoniker:    ValidatorMoniker,
-			Pubkey:              Pubkey,
-			Direction:           Direction,
-			BeforeBlocksMissing: previous,
-			NowBlocksMissing:    current,
-		})
 	}
 
-	log.Info().
-		Int("missedBlocksIncreased", missedBlocksIncreased).
-		Int("missedBlocksNotChanged", missedBlocksNotChanged).
-		Int("missedBlocksDecreased", missedBlocksDecreased).
-		Int("missedBlocksBelowThreshold", missedBlocksBelowThreshold).
-		Msg("Validators diff")
-
-	beforePreviousInfos = previousInfos
-	previousInfos = signingInfos.Info
-
-	return &report
+	return newState, nil
 }
 
-func setBechPrefixes(cmd *cobra.Command) {
-	if flag, err := cmd.Flags().GetString("bech-validator-prefix"); flag != "" && err == nil {
-		ValidatorPrefix = flag
+func GetValidatorReportEntry(oldState, newState ValidatorState) (*ReportEntry, bool) {
+	log.Debug().
+		Str("oldState", fmt.Sprintf("%+v", oldState)).
+		Str("newState", fmt.Sprintf("%+v", newState)).
+		Msg("Processing validator report entry")
+
+	// 1. If validator's tombstoned, but wasn't - set tombstoned report entry.
+	if newState.Tombstoned && !oldState.Tombstoned {
+		log.Debug().
+			Str("address", oldState.Address).
+			Msg("Validator is tombstoned")
+		return &ReportEntry{
+			ValidatorAddress: newState.Address,
+			ValidatorMoniker: newState.Moniker,
+			Emoji:            TOMBSTONED_EMOJI,
+			Description:      TOMBSTONED_DESC,
+			Direction:        TOMBSTONED,
+		}, true
+	}
+
+	// 2. If validator's jailed, but wasn't - set jailed report entry.
+	if newState.Jailed && !oldState.Jailed {
+		log.Debug().
+			Str("address", oldState.Address).
+			Msg("Validator is jailed")
+		return &ReportEntry{
+			ValidatorAddress: newState.Address,
+			ValidatorMoniker: newState.Moniker,
+			Emoji:            JAILED_EMOJI,
+			Description:      JAILED_DESC,
+			Direction:        JAILED,
+		}, true
+	}
+
+	// 3. If validator's not jailed, but was - set unjailed report entry.
+	if !newState.Jailed && oldState.Jailed {
+		log.Debug().
+			Str("address", oldState.Address).
+			Msg("Validator is unjailed")
+		return &ReportEntry{
+			ValidatorAddress: newState.Address,
+			ValidatorMoniker: newState.Moniker,
+			Emoji:            JAILED_EMOJI,
+			Description:      JAILED_DESC,
+			Direction:        JAILED,
+		}, true
+	}
+
+	// 4. If validator is and was jailed - do nothing.
+	if newState.Jailed && oldState.Jailed {
+		log.Debug().
+			Str("address", oldState.Address).
+			Msg("Validator is and was jailed - no need to send report")
+		return nil, false
+	}
+
+	// 5. Validator isn't and wasn't jailed.
+	//
+	// First, check if old and new groups are the same - if they have different start,
+	// they are different. If they don't - they aren't so no need to send a notification.
+	oldGroup, oldGroupErr := MissedBlockGroups.GetGroup(oldState.MissedBlocks)
+	if oldGroupErr != nil {
+		log.Error().Err(oldGroupErr).Msg("Could not get old group")
+		return nil, false
+	}
+	newGroup, newGroupErr := MissedBlockGroups.GetGroup(newState.MissedBlocks)
+	if newGroupErr != nil {
+		log.Error().Err(newGroupErr).Msg("Could not get new group")
+		return nil, false
+	}
+
+	if oldGroup.Start == newGroup.Start {
+		log.Debug().
+			Str("address", oldState.Address).
+			Int64("before", oldState.MissedBlocks).
+			Int64("after", newState.MissedBlocks).
+			Msg("Validator didn't change group - no need to send report")
+		return nil, false
+	}
+
+	// Validator switched from one MissedBlockGroup to another, 2 cases how that may happen
+	// 1) validator is skipping blocks
+	// 2) validator skipped some blocks in the past, but recovered, is now signing, and the window
+	// moves - the amount of missed blocks is decreasing.
+	// Need to understand which one it is: if old missed blocks < new missed blocks -
+	// it's 1), if vice versa, then 2)
+
+	entry := &ReportEntry{
+		ValidatorAddress: newState.Address,
+		ValidatorMoniker: newState.Moniker,
+	}
+
+	if oldState.MissedBlocks < newState.MissedBlocks {
+		// skipping blocks
+		entry.Direction = INCREASING
+		entry.Emoji = newGroup.EmojiStart
+		entry.Description = newGroup.DescStart
 	} else {
-		ValidatorPrefix = Prefix + "valoper"
+		// restoring
+		entry.Direction = DECREASING
+		entry.Emoji = oldGroup.EmojiEnd
+		entry.Description = oldGroup.DescEnd
+	}
+
+	return entry, true
+}
+
+func SetBechPrefixes(cmd *cobra.Command) {
+	if flag, err := cmd.Flags().GetString("bech-validator-prefix"); flag != "" && err == nil {
+		Config.ValidatorPrefix = flag
+	} else if Config.Prefix == "" {
+		log.Fatal().Msg("Both bech-validator-prefix and bech-prefix are not set!")
+	} else {
+		Config.ValidatorPrefix = Config.Prefix + "valoper"
 	}
 
 	if flag, err := cmd.Flags().GetString("bech-validator-pubkey-prefix"); flag != "" && err == nil {
-		ValidatorPubkeyPrefix = flag
+		Config.ValidatorPubkeyPrefix = flag
+	} else if Config.Prefix == "" {
+		log.Fatal().Msg("Both bech-validator-pubkey-prefix and bech-prefix are not set!")
 	} else {
-		ValidatorPubkeyPrefix = Prefix + "valoperpub"
+		Config.ValidatorPubkeyPrefix = Config.Prefix + "valoperpub"
 	}
 
 	if flag, err := cmd.Flags().GetString("bech-consensus-node-prefix"); flag != "" && err == nil {
-		ConsensusNodePrefix = flag
+		Config.ConsensusNodePrefix = flag
+	} else if Config.Prefix == "" {
+		log.Fatal().Msg("Both bech-consensus-node-prefix and bech-prefix are not set!")
 	} else {
-		ConsensusNodePrefix = Prefix + "valcons"
+		Config.ConsensusNodePrefix = Config.Prefix + "valcons"
 	}
 
 	if flag, err := cmd.Flags().GetString("bech-consensus-node-pubkey-prefix"); flag != "" && err == nil {
-		ConsensusNodePubkeyPrefix = flag
+		Config.ConsensusNodePubkeyPrefix = flag
+	} else if Config.Prefix == "" {
+		log.Fatal().Msg("Both bech-consensus-node-pubkey-prefix and bech-prefix are not set!")
 	} else {
-		ConsensusNodePubkeyPrefix = Prefix + "valconspub"
+		Config.ConsensusNodePubkeyPrefix = Config.Prefix + "valconspub"
 	}
-}
-
-func findValidator(address string) (stakingtypes.Validator, bool) {
-	for _, validatorIterated := range validators {
-		err := validatorIterated.UnpackInterfaces(interfaceRegistry)
-		if err != nil {
-			// shouldn't happen
-			log.Error().Err(err).Msg("Could not unpack interface")
-			return stakingtypes.Validator{}, false
-		}
-
-		pubKey, err := validatorIterated.GetConsAddr()
-		if err != nil {
-			log.Error().
-				Str("address", validatorIterated.OperatorAddress).
-				Err(err).
-				Msg("Could not get validator pubkey")
-		}
-
-		if pubKey.String() == address {
-			return validatorIterated, true
-		}
-	}
-
-	return stakingtypes.Validator{}, false
 }
 
 func isValidatorMonitored(address string) bool {
 	// If no args passed, we want to be notified about all validators.
-	if len(IncludeValidators) == 0 && len(ExcludeValidators) == 0 {
+	if len(Config.IncludeValidators) == 0 && len(Config.ExcludeValidators) == 0 {
 		return true
 	}
 
 	// If monitoring only specific validators
-	if len(IncludeValidators) != 0 {
-		for _, monitoredValidatorAddr := range IncludeValidators {
+	if len(Config.IncludeValidators) != 0 {
+		for _, monitoredValidatorAddr := range Config.IncludeValidators {
 			if monitoredValidatorAddr == address {
 				return true
 			}
@@ -506,7 +496,7 @@ func isValidatorMonitored(address string) bool {
 	}
 
 	// If monitoring all validators except the specified ones
-	for _, monitoredValidatorAddr := range ExcludeValidators {
+	for _, monitoredValidatorAddr := range Config.ExcludeValidators {
 		if monitoredValidatorAddr == address {
 			return false
 		}
@@ -515,7 +505,7 @@ func isValidatorMonitored(address string) bool {
 	return true
 }
 
-func setMissedBlocksToJail() {
+func SetMissedBlocksToJail() {
 	slashingClient := slashingtypes.NewQueryClient(grpcConn)
 	params, err := slashingClient.Params(
 		context.Background(),
@@ -542,7 +532,7 @@ func setMissedBlocksToJail() {
 		Msg("Missed blocks to jail calculated")
 }
 
-func setAvgBlockTime() {
+func SetAvgBlockTime() {
 	latestBlock := getBlock(nil)
 	latestHeight := latestBlock.Height
 	beforeLatestBlockHeight := latestBlock.Height - BlocksDiffInThePast
@@ -562,7 +552,7 @@ func setAvgBlockTime() {
 }
 
 func getBlock(height *int64) *ctypes.Block {
-	client, err := tmrpc.New(TendermintRpc, "/websocket")
+	client, err := tmrpc.New(Config.TendermintRpc, "/websocket")
 	if err != nil {
 		log.Fatal().Err(err).Msg("Could not create Tendermint client")
 	}
@@ -576,30 +566,30 @@ func getBlock(height *int64) *ctypes.Block {
 }
 
 func main() {
-	rootCmd.PersistentFlags().StringVar(&ConfigPath, "config", "", "Config file path")
-	rootCmd.PersistentFlags().StringVar(&NodeAddress, "node", "localhost:9090", "RPC node address")
-	rootCmd.PersistentFlags().StringVar(&LogLevel, "log-level", "info", "Logging level")
-	rootCmd.PersistentFlags().IntVar(&Interval, "interval", 120, "Interval between two checks, in seconds")
-	rootCmd.PersistentFlags().Int64Var(&Threshold, "threshold", 0, "Threshold of missed blocks")
-	rootCmd.PersistentFlags().Uint64Var(&Limit, "limit", 1000, "gRPC query pagination limit")
-	rootCmd.PersistentFlags().StringVar(&MintscanPrefix, "mintscan-prefix", "persistence", "Prefix for mintscan links like https://mintscan.io/{prefix}")
-	rootCmd.PersistentFlags().StringVar(&TendermintRpc, "tendermint-rpc", "http://localhost:26657", "Tendermint RPC address")
+	rootCmd.PersistentFlags().StringVar(&Config.ConfigPath, "config", "", "Config file path")
+	rootCmd.PersistentFlags().StringVar(&Config.NodeAddress, "node", "localhost:9090", "RPC node address")
+	rootCmd.PersistentFlags().StringVar(&Config.LogLevel, "log-level", "info", "Logging level")
+	rootCmd.PersistentFlags().IntVar(&Config.Interval, "interval", 120, "Interval between two checks, in seconds")
+	rootCmd.PersistentFlags().Int64Var(&Config.Threshold, "threshold", 0, "Threshold of missed blocks")
+	rootCmd.PersistentFlags().Uint64Var(&Config.Limit, "limit", 1000, "gRPC query pagination limit")
+	rootCmd.PersistentFlags().StringVar(&Config.MintscanPrefix, "mintscan-prefix", "", "Prefix for mintscan links like https://mintscan.io/{prefix}")
+	rootCmd.PersistentFlags().StringVar(&Config.TendermintRpc, "tendermint-rpc", "http://localhost:26657", "Tendermint RPC address")
 
-	rootCmd.PersistentFlags().StringVar(&TelegramToken, "telegram-token", "", "Telegram bot token")
-	rootCmd.PersistentFlags().IntVar(&TelegramChat, "telegram-chat", 0, "Telegram chat or user ID")
-	rootCmd.PersistentFlags().StringVar(&TelegramConfigPath, "telegram-config", "", "Telegram config path")
-	rootCmd.PersistentFlags().StringVar(&SlackToken, "slack-token", "", "Slack bot token")
-	rootCmd.PersistentFlags().StringVar(&SlackChat, "slack-chat", "", "Slack chat or user ID")
+	rootCmd.PersistentFlags().StringVar(&Config.TelegramToken, "telegram-token", "", "Telegram bot token")
+	rootCmd.PersistentFlags().IntVar(&Config.TelegramChat, "telegram-chat", 0, "Telegram chat or user ID")
+	rootCmd.PersistentFlags().StringVar(&Config.TelegramConfigPath, "telegram-config", "", "Telegram config path")
+	rootCmd.PersistentFlags().StringVar(&Config.SlackToken, "slack-token", "", "Slack bot token")
+	rootCmd.PersistentFlags().StringVar(&Config.SlackChat, "slack-chat", "", "Slack chat or user ID")
 
-	rootCmd.PersistentFlags().StringSliceVar(&IncludeValidators, "include", []string{}, "Validators to monitor")
-	rootCmd.PersistentFlags().StringSliceVar(&ExcludeValidators, "exclude", []string{}, "Validators to not monitor")
+	rootCmd.PersistentFlags().StringSliceVar(&Config.IncludeValidators, "include", []string{}, "Validators to monitor")
+	rootCmd.PersistentFlags().StringSliceVar(&Config.ExcludeValidators, "exclude", []string{}, "Validators to not monitor")
 
 	// some networks, like Iris, have the different prefixes for address, validator and consensus node
-	rootCmd.PersistentFlags().StringVar(&Prefix, "bech-prefix", "persistence", "Bech32 global prefix")
-	rootCmd.PersistentFlags().StringVar(&ValidatorPrefix, "bech-validator-prefix", "", "Bech32 validator prefix")
-	rootCmd.PersistentFlags().StringVar(&ValidatorPubkeyPrefix, "bech-validator-pubkey-prefix", "", "Bech32 pubkey validator prefix")
-	rootCmd.PersistentFlags().StringVar(&ConsensusNodePrefix, "bech-consensus-node-prefix", "", "Bech32 consensus node prefix")
-	rootCmd.PersistentFlags().StringVar(&ConsensusNodePubkeyPrefix, "bech-consensus-node-pubkey-prefix", "", "Bech32 pubkey consensus node prefix")
+	rootCmd.PersistentFlags().StringVar(&Config.Prefix, "bech-prefix", "", "Bech32 global prefix")
+	rootCmd.PersistentFlags().StringVar(&Config.ValidatorPrefix, "bech-validator-prefix", "", "Bech32 validator prefix")
+	rootCmd.PersistentFlags().StringVar(&Config.ValidatorPubkeyPrefix, "bech-validator-pubkey-prefix", "", "Bech32 pubkey validator prefix")
+	rootCmd.PersistentFlags().StringVar(&Config.ConsensusNodePrefix, "bech-consensus-node-prefix", "", "Bech32 consensus node prefix")
+	rootCmd.PersistentFlags().StringVar(&Config.ConsensusNodePubkeyPrefix, "bech-consensus-node-pubkey-prefix", "", "Bech32 pubkey consensus node prefix")
 
 	zerolog.SetGlobalLevel(zerolog.InfoLevel)
 
