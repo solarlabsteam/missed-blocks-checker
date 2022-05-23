@@ -52,6 +52,7 @@ WantedBy=multi-user.target
 Then we'll add this service to the autostart and run it:
 
 ```sh
+sudo systemctl daemon-reload
 sudo systemctl enable missed-blocks-checker
 sudo systemctl start missed-blocks-checker
 sudo systemctl status missed-blocks-checker # validate it's running
