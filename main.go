@@ -236,14 +236,15 @@ func Execute(cmd *cobra.Command, args []string) {
 }
 
 func GenerateReport() *Report {
-	if len(State) == 0 {
-		log.Info().Msg("No previous state, skipping.")
-		return &Report{}
-	}
-
 	newState, err := GetNewState()
 	if err != nil {
 		log.Error().Err(err).Msg("Error getting new state")
+		return &Report{}
+	}
+
+	if len(State) == 0 {
+		log.Info().Msg("No previous state, skipping.")
+		State = newState
 		return &Report{}
 	}
 
