@@ -122,7 +122,7 @@ func (r TelegramReporter) Serialize(report Report) string {
 		notifiers := r.TelegramConfig.getNotifiersSerialized(entry.ValidatorAddress)
 
 		sb.WriteString(fmt.Sprintf(
-			"%s <strong>%s</strong> %s%s %s\n",
+			"%s <strong>%s %s</strong>%s %s\n",
 			entry.Emoji,
 			validatorLink,
 			entry.Description,

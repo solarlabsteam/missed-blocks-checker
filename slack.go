@@ -36,7 +36,7 @@ func (r SlackReporter) Serialize(report Report) string {
 		)
 
 		sb.WriteString(fmt.Sprintf(
-			"%s <strong>%s</strong> %s%s\n",
+			"%s <strong>%s %s</strong>%s\n",
 			entry.Emoji,
 			validatorLink,
 			entry.Description,
