@@ -515,7 +515,7 @@ func SetDefaultMissedBlocksGroups() {
 
 	for i := 0; i < len(percents)-1; i++ {
 		start := float64(MissedBlocksToJail) * percents[i] / 100
-		end := float64(MissedBlocksToJail) * percents[i+1] / 100
+		end := float64(MissedBlocksToJail)*percents[i+1]/100 - 1
 
 		groups = append(groups, MissedBlocksGroup{
 			Start:      int64(start),
