@@ -527,6 +527,7 @@ func SetDefaultMissedBlocksGroups() {
 		})
 	}
 
+	MissedBlockGroups = groups
 }
 
 func GetBlock(height *int64) *ctypes.Block {
