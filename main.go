@@ -522,8 +522,8 @@ func SetDefaultMissedBlocksGroups() {
 			End:        int64(end),
 			EmojiStart: emojiStart[i],
 			EmojiEnd:   emojiEnd[i],
-			DescStart:  fmt.Sprintf("is skipping blocks (> %.1f)", percents[i+1]),
-			DescEnd:    fmt.Sprintf("is recovering (< %.1f)", percents[i]),
+			DescStart:  fmt.Sprintf("is skipping blocks (> %.1f%%)", percents[i]),
+			DescEnd:    fmt.Sprintf("is recovering (< %.1f%%)", percents[i+1]),
 		})
 	}
 
