@@ -392,9 +392,9 @@ func GetValidatorReportEntry(oldState, newState ValidatorState) (*ReportEntry, b
 		return &ReportEntry{
 			ValidatorAddress: newState.Address,
 			ValidatorMoniker: newState.Moniker,
-			Emoji:            JAILED_EMOJI,
-			Description:      JAILED_DESC,
-			Direction:        JAILED,
+			Emoji:            UNJAILED_EMOJI,
+			Description:      UNJAILED_DESC,
+			Direction:        UNJAILED,
 		}, true
 	}
 
