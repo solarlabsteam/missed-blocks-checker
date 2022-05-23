@@ -259,7 +259,7 @@ func GenerateReport() *Report {
 
 		entry, present := GetValidatorReportEntry(oldState, info)
 		if !present {
-			log.Debug().
+			log.Trace().
 				Str("address", address).
 				Msg("No report entry present")
 			continue
