@@ -16,26 +16,27 @@ const (
 )
 
 const (
-	TOMBSTONED_EMOJI = "💀"
-	JAILED_EMOJI     = "❌"
-	UNJAILED_EMOJI   = "👌"
+	TombstonedEmoji = "💀"
+	JailedEmoju     = "❌"
+	UnjailedEmoji   = "👌"
 )
 
 const (
-	TOMBSTONED_DESC = "was tombstoned"
-	JAILED_DESC     = "was jailed"
-	UNJAILED_DESC   = "was unjailed"
+	TombstonedDesc = "was tombstoned"
+	JailedDesc     = "was jailed"
+	UnjailedDesc   = "was unjailed"
 )
 
 type AppConfig struct {
 	ConfigPath     string
 	NodeAddress    string
 	LogLevel       string
+	JsonOutput     bool
 	Interval       int
 	Threshold      int64
 	Limit          uint64
 	MintscanPrefix string
-	TendermintRpc  string
+	TendermintRPC  string
 
 	TelegramToken      string
 	TelegramConfigPath string
@@ -114,7 +115,7 @@ func (g MissedBlocksGroups) GetGroup(missed int64) (*MissedBlocksGroup, error) {
 		}
 	}
 
-	return nil, fmt.Errorf("Could not find a group for missed blocks counter = %d", missed)
+	return nil, fmt.Errorf("could not find a group for missed blocks counter = %d", missed)
 }
 
 type ReportEntry struct {

@@ -104,11 +104,10 @@ func (r TelegramReporter) Serialize(report Report) string {
 	for _, entry := range report.Entries {
 		var (
 			validatorLink string
-			timeToJail    string = ""
+			timeToJail    = ""
 		)
 
-		switch entry.Direction {
-		case INCREASING:
+		if entry.Direction == INCREASING {
 			timeToJail = fmt.Sprintf(" (%s till jail)", entry.GetTimeToJail())
 		}
 

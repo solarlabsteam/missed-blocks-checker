@@ -53,12 +53,9 @@ var rootCmd = &cobra.Command{
 	Long: "Tool to monitor missed blocks for Cosmos-chain validators",
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 		if Config.ConfigPath == "" {
-			log.Trace().Msg("No config file provided, skipping")
 			SetBechPrefixes(cmd)
 			return nil
 		}
-
-		log.Trace().Msg("Config file provided")
 
 		viper.SetConfigFile(Config.ConfigPath)
 		if err := viper.ReadInConfig(); err != nil {
@@ -89,6 +86,10 @@ func Execute(cmd *cobra.Command, args []string) {
 	logLevel, err := zerolog.ParseLevel(Config.LogLevel)
 	if err != nil {
 		log.Fatal().Err(err).Msg("Could not parse log level")
+	}
+
+	if Config.JsonOutput {
+		log = zerolog.New(os.Stdout).With().Timestamp().Logger()
 	}
 
 	zerolog.SetGlobalLevel(logLevel)
@@ -259,6 +260,11 @@ func GetNewState() (ValidatorsState, error) {
 		}
 
 		pubKey, err := validator.GetConsAddr()
+		if err != nil {
+			log.Error().Err(err).Msg("Could not get cons addr")
+			return nil, err
+		}
+
 		validatorsMap[pubKey.String()] = validator
 	}
 
@@ -303,8 +309,8 @@ func GetValidatorReportEntry(oldState, newState ValidatorState) (*ReportEntry, b
 		return &ReportEntry{
 			ValidatorAddress: newState.Address,
 			ValidatorMoniker: newState.Moniker,
-			Emoji:            TOMBSTONED_EMOJI,
-			Description:      TOMBSTONED_DESC,
+			Emoji:            TombstonedEmoji,
+			Description:      TombstonedDesc,
 			Direction:        TOMBSTONED,
 		}, true
 	}
@@ -317,8 +323,8 @@ func GetValidatorReportEntry(oldState, newState ValidatorState) (*ReportEntry, b
 		return &ReportEntry{
 			ValidatorAddress: newState.Address,
 			ValidatorMoniker: newState.Moniker,
-			Emoji:            JAILED_EMOJI,
-			Description:      JAILED_DESC,
+			Emoji:            JailedEmoju,
+			Description:      JailedDesc,
 			Direction:        JAILED,
 		}, true
 	}
@@ -331,8 +337,8 @@ func GetValidatorReportEntry(oldState, newState ValidatorState) (*ReportEntry, b
 		return &ReportEntry{
 			ValidatorAddress: newState.Address,
 			ValidatorMoniker: newState.Moniker,
-			Emoji:            UNJAILED_EMOJI,
-			Description:      UNJAILED_DESC,
+			Emoji:            UnjailedEmoji,
+			Description:      UnjailedDesc,
 			Direction:        UNJAILED,
 		}, true
 	}
@@ -533,7 +539,7 @@ func SetDefaultMissedBlocksGroups() {
 }
 
 func GetBlock(height *int64) *ctypes.Block {
-	client, err := tmrpc.New(Config.TendermintRpc, "/websocket")
+	client, err := tmrpc.New(Config.TendermintRPC, "/websocket")
 	if err != nil {
 		log.Fatal().Err(err).Msg("Could not create Tendermint client")
 	}
@@ -550,11 +556,12 @@ func main() {
 	rootCmd.PersistentFlags().StringVar(&Config.ConfigPath, "config", "", "Config file path")
 	rootCmd.PersistentFlags().StringVar(&Config.NodeAddress, "node", "localhost:9090", "RPC node address")
 	rootCmd.PersistentFlags().StringVar(&Config.LogLevel, "log-level", "info", "Logging level")
+	rootCmd.PersistentFlags().BoolVar(&Config.JsonOutput, "json", false, "Output logs as JSON")
 	rootCmd.PersistentFlags().IntVar(&Config.Interval, "interval", 120, "Interval between two checks, in seconds")
 	rootCmd.PersistentFlags().Int64Var(&Config.Threshold, "threshold", 0, "Threshold of missed blocks")
 	rootCmd.PersistentFlags().Uint64Var(&Config.Limit, "limit", 1000, "gRPC query pagination limit")
 	rootCmd.PersistentFlags().StringVar(&Config.MintscanPrefix, "mintscan-prefix", "", "Prefix for mintscan links like https://mintscan.io/{prefix}")
-	rootCmd.PersistentFlags().StringVar(&Config.TendermintRpc, "tendermint-rpc", "http://localhost:26657", "Tendermint RPC address")
+	rootCmd.PersistentFlags().StringVar(&Config.TendermintRPC, "tendermint-rpc", "http://localhost:26657", "Tendermint RPC address")
 
 	rootCmd.PersistentFlags().StringVar(&Config.TelegramToken, "telegram-token", "", "Telegram bot token")
 	rootCmd.PersistentFlags().IntVar(&Config.TelegramChat, "telegram-chat", 0, "Telegram chat or user ID")
