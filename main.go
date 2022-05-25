@@ -385,6 +385,7 @@ func GetValidatorReportEntry(oldState, newState ValidatorState) (*ReportEntry, b
 	entry := &ReportEntry{
 		ValidatorAddress: newState.Address,
 		ValidatorMoniker: newState.Moniker,
+		MissingBlocks:    newState.MissedBlocks,
 	}
 
 	if oldState.MissedBlocks < newState.MissedBlocks {
