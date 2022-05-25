@@ -132,8 +132,11 @@ func Execute(cmd *cobra.Command, args []string) {
 	}
 
 	for _, reporter := range reporters {
-		log.Info().Str("name", reporter.Name()).Msg("Init reporter")
 		reporter.Init()
+
+		if reporter.Enabled() {
+			log.Info().Str("name", reporter.Name()).Msg("Init reporter")
+		}
 	}
 
 	grpcConn, err = grpc.Dial(
