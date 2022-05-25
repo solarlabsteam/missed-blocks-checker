@@ -562,7 +562,6 @@ func main() {
 	rootCmd.PersistentFlags().StringVar(&Config.LogLevel, "log-level", "info", "Logging level")
 	rootCmd.PersistentFlags().BoolVar(&Config.JsonOutput, "json", false, "Output logs as JSON")
 	rootCmd.PersistentFlags().IntVar(&Config.Interval, "interval", 120, "Interval between two checks, in seconds")
-	rootCmd.PersistentFlags().Int64Var(&Config.Threshold, "threshold", 0, "Threshold of missed blocks")
 	rootCmd.PersistentFlags().Uint64Var(&Config.Limit, "limit", 1000, "gRPC query pagination limit")
 	rootCmd.PersistentFlags().StringVar(&Config.MintscanPrefix, "mintscan-prefix", "", "Prefix for mintscan links like https://mintscan.io/{prefix}")
 	rootCmd.PersistentFlags().StringVar(&Config.TendermintRPC, "tendermint-rpc", "http://localhost:26657", "Tendermint RPC address")

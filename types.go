@@ -33,7 +33,6 @@ type AppConfig struct {
 	LogLevel       string
 	JsonOutput     bool
 	Interval       int
-	Threshold      int64
 	Limit          uint64
 	MintscanPrefix string
 	TendermintRPC  string
