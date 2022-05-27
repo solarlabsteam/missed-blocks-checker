@@ -115,7 +115,7 @@ func (r TelegramReporter) Serialize(report Report) string {
 		validatorLink = fmt.Sprintf(
 			"<a href=\"https://www.mintscan.io/%s/validators/%s\">%s</a>",
 			Config.MintscanPrefix,
-			entry.ValidatorAddress,
+			html.EscapeString(entry.ValidatorAddress),
 			entry.ValidatorMoniker,
 		)
 
