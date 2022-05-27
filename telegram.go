@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"html"
 	"io/ioutil"
 	"os"
 	"strings"
@@ -124,7 +125,7 @@ func (r TelegramReporter) Serialize(report Report) string {
 			"%s <strong>%s %s</strong>%s %s\n",
 			entry.Emoji,
 			validatorLink,
-			entry.Description,
+			html.EscapeString(entry.Description),
 			timeToJail,
 			notifiers,
 		))
