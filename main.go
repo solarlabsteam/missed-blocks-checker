@@ -118,27 +118,6 @@ func Execute(cmd *cobra.Command, args []string) {
 			Msg("Monitoring all validators except specific")
 	}
 
-	reporters = []Reporter{
-		&TelegramReporter{
-			TelegramToken:      Config.TelegramToken,
-			TelegramChat:       Config.TelegramChat,
-			TelegramConfigPath: Config.TelegramConfigPath,
-			MissedBlocksGroups: Config.MissedBlocksGroups,
-		},
-		&SlackReporter{
-			SlackToken: Config.SlackToken,
-			SlackChat:  Config.SlackChat,
-		},
-	}
-
-	for _, reporter := range reporters {
-		reporter.Init()
-
-		if reporter.Enabled() {
-			log.Info().Str("name", reporter.Name()).Msg("Init reporter")
-		}
-	}
-
 	grpcConn, err = grpc.Dial(
 		Config.NodeAddress,
 		grpc.WithInsecure(),
@@ -159,6 +138,27 @@ func Execute(cmd *cobra.Command, args []string) {
 
 	if err := Config.MissedBlocksGroups.Validate(MissedBlocksToJail); err != nil {
 		log.Fatal().Err(err).Msg("MissedBlockGroups config is invalid")
+	}
+
+	reporters = []Reporter{
+		&TelegramReporter{
+			TelegramToken:      Config.TelegramToken,
+			TelegramChat:       Config.TelegramChat,
+			TelegramConfigPath: Config.TelegramConfigPath,
+			MissedBlocksGroups: Config.MissedBlocksGroups,
+		},
+		&SlackReporter{
+			SlackToken: Config.SlackToken,
+			SlackChat:  Config.SlackChat,
+		},
+	}
+
+	for _, reporter := range reporters {
+		reporter.Init()
+
+		if reporter.Enabled() {
+			log.Info().Str("name", reporter.Name()).Msg("Init reporter")
+		}
 	}
 
 	for {
