@@ -35,8 +35,7 @@ var (
 
 	grpcConn *grpc.ClientConn
 
-	State             ValidatorsState    = make(map[string]ValidatorState)
-	MissedBlockGroups MissedBlocksGroups = []MissedBlocksGroup{}
+	State ValidatorsState = make(map[string]ValidatorState)
 )
 
 var reporters []Reporter
@@ -124,6 +123,7 @@ func Execute(cmd *cobra.Command, args []string) {
 			TelegramToken:      Config.TelegramToken,
 			TelegramChat:       Config.TelegramChat,
 			TelegramConfigPath: Config.TelegramConfigPath,
+			MissedBlocksGroups: Config.MissedBlocksGroups,
 		},
 		&SlackReporter{
 			SlackToken: Config.SlackToken,
@@ -154,10 +154,10 @@ func Execute(cmd *cobra.Command, args []string) {
 	SetDefaultMissedBlocksGroups()
 
 	log.Info().
-		Str("groups", fmt.Sprintf("%+v", MissedBlockGroups)).
+		Str("groups", fmt.Sprintf("%+v", Config.MissedBlocksGroups)).
 		Msg("Using the following MissedBlocksGroups")
 
-	if err := MissedBlockGroups.Validate(MissedBlocksToJail); err != nil {
+	if err := Config.MissedBlocksGroups.Validate(MissedBlocksToJail); err != nil {
 		log.Fatal().Err(err).Msg("MissedBlockGroups config is invalid")
 	}
 
@@ -358,12 +358,12 @@ func GetValidatorReportEntry(oldState, newState ValidatorState) (*ReportEntry, b
 	//
 	// First, check if old and new groups are the same - if they have different start,
 	// they are different. If they don't - they aren't so no need to send a notification.
-	oldGroup, oldGroupErr := MissedBlockGroups.GetGroup(oldState.MissedBlocks)
+	oldGroup, oldGroupErr := Config.MissedBlocksGroups.GetGroup(oldState.MissedBlocks)
 	if oldGroupErr != nil {
 		log.Error().Err(oldGroupErr).Msg("Could not get old group")
 		return nil, false
 	}
-	newGroup, newGroupErr := MissedBlockGroups.GetGroup(newState.MissedBlocks)
+	newGroup, newGroupErr := Config.MissedBlocksGroups.GetGroup(newState.MissedBlocks)
 	if newGroupErr != nil {
 		log.Error().Err(newGroupErr).Msg("Could not get new group")
 		return nil, false
@@ -522,7 +522,7 @@ func SetAvgBlockTime() {
 }
 
 func SetDefaultMissedBlocksGroups() {
-	if len(MissedBlockGroups) > 0 {
+	if Config.MissedBlocksGroups != nil {
 		log.Debug().Msg("MissedBlockGroups is set, not setting the default ones.")
 		return
 	}
@@ -549,7 +549,7 @@ func SetDefaultMissedBlocksGroups() {
 		})
 	}
 
-	MissedBlockGroups = groups
+	Config.MissedBlocksGroups = groups
 }
 
 func GetBlock(height *int64) *ctypes.Block {

@@ -51,6 +51,8 @@ type AppConfig struct {
 
 	IncludeValidators []string
 	ExcludeValidators []string
+
+	MissedBlocksGroups MissedBlocksGroups
 }
 
 type ValidatorState struct {

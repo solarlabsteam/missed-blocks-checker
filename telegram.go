@@ -20,6 +20,7 @@ type TelegramReporter struct {
 	TelegramToken      string
 	TelegramChat       int
 	TelegramConfigPath string
+	MissedBlocksGroups MissedBlocksGroups
 	TelegramConfig     TelegramConfig
 
 	TelegramBot *tb.Bot
@@ -155,6 +156,7 @@ func (r *TelegramReporter) Init() {
 	r.TelegramBot.Handle("/status", r.getValidatorStatus)
 	r.TelegramBot.Handle("/subscribe", r.subscribeToValidatorUpdates)
 	r.TelegramBot.Handle("/unsubscribe", r.unsubscribeFromValidatorUpdates)
+	r.TelegramBot.Handle("/config", r.displayConfig)
 	go r.TelegramBot.Start()
 
 	r.loadConfigFromYaml()
@@ -205,6 +207,7 @@ func (r TelegramReporter) getHelp(message *tb.Message) {
 	sb.WriteString("- /subscribe &lt;validator address&gt; - be notified on validator's missed block in a Telegram channel\n")
 	sb.WriteString("- /unsubscribe &lt;validator address&gt; - undo the subscription given at the previous step\n")
 	sb.WriteString("- /status &lt;validator address&gt; - get validator missed blocks\n")
+	sb.WriteString("- /config - display bot config\n")
 	sb.WriteString("- /status - get the missed blocks of the validator(s) you're subscribed to\n\n")
 	sb.WriteString("Created by <a href=\"https://freak12techno.github.io\">freak12techno</a> at <a href=\"https://validator.solar\">SOLAR Labs</a> with ❤️.\n")
 	sb.WriteString("This bot is open-sourced, you can get the source code at https://github.com/solarlabsteam/missed-blocks-checker.\n\n")
@@ -409,6 +412,15 @@ func (r *TelegramReporter) unsubscribeFromValidatorUpdates(message *tb.Message) 
 		Str("user", message.Sender.Username).
 		Str("address", address).
 		Msg("Successfully unsubscribed from validator's notifications.")
+}
+
+func (r *TelegramReporter) displayConfig(message *tb.Message) {
+	var sb strings.Builder
+	for _, group := range r.MissedBlocksGroups {
+		sb.WriteString(fmt.Sprintf("%s %d - %d\n", group.EmojiStart, group.Start, group.End))
+	}
+
+	r.sendMessage(message, sb.String())
 }
 
 func (r *TelegramReporter) loadConfigFromYaml() {
