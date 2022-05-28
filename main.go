@@ -136,7 +136,7 @@ func Execute(cmd *cobra.Command, args []string) {
 		Str("groups", fmt.Sprintf("%+v", Config.MissedBlocksGroups)).
 		Msg("Using the following MissedBlocksGroups")
 
-	if err := Config.MissedBlocksGroups.Validate(MissedBlocksToJail); err != nil {
+	if err := Config.MissedBlocksGroups.Validate(SignedBlocksWindow); err != nil {
 		log.Fatal().Err(err).Msg("MissedBlockGroups config is invalid")
 	}
 
@@ -525,7 +525,7 @@ func SetDefaultMissedBlocksGroups() {
 		return
 	}
 
-	totalRange := float64(MissedBlocksToJail) + 1 // from 0 till max blocks allowed, including
+	totalRange := float64(SignedBlocksWindow) + 1 // from 0 till max blocks allowed, including
 
 	groups := []MissedBlocksGroup{}
 
