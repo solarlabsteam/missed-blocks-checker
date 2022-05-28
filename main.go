@@ -145,7 +145,7 @@ func Execute(cmd *cobra.Command, args []string) {
 			TelegramToken:      Config.TelegramToken,
 			TelegramChat:       Config.TelegramChat,
 			TelegramConfigPath: Config.TelegramConfigPath,
-			MissedBlocksGroups: Config.MissedBlocksGroups,
+			Config:             &Config,
 		},
 		&SlackReporter{
 			SlackToken: Config.SlackToken,

@@ -20,8 +20,8 @@ type TelegramReporter struct {
 	TelegramToken      string
 	TelegramChat       int
 	TelegramConfigPath string
-	MissedBlocksGroups MissedBlocksGroups
 	TelegramConfig     TelegramConfig
+	Config             *AppConfig
 
 	TelegramBot *tb.Bot
 }
@@ -416,7 +416,35 @@ func (r *TelegramReporter) unsubscribeFromValidatorUpdates(message *tb.Message) 
 
 func (r *TelegramReporter) displayConfig(message *tb.Message) {
 	var sb strings.Builder
-	for _, group := range r.MissedBlocksGroups {
+
+	if len(r.Config.ExcludeValidators) == 0 && len(r.Config.IncludeValidators) == 0 {
+		sb.WriteString("<strong>Monitoring all validators.\n</strong>")
+	} else if len(r.Config.IncludeValidators) == 0 {
+		sb.WriteString("<strong>Monitoring all validators, except the following ones:\n</strong>")
+
+		for _, validator := range r.Config.ExcludeValidators {
+			sb.WriteString(fmt.Sprintf(
+				"- <a href=\"https://mintscan.io/%s/validators/%s\">%s</a>\n",
+				Config.MintscanPrefix,
+				validator,
+				validator,
+			))
+		}
+	} else if len(r.Config.ExcludeValidators) == 0 {
+		sb.WriteString("<strong>Monitoring the following validators:\n</strong>")
+
+		for _, validator := range r.Config.IncludeValidators {
+			sb.WriteString(fmt.Sprintf(
+				"- <a href=\"https://mintscan.io/%s/validators/%s\">%s</a>\n",
+				Config.MintscanPrefix,
+				validator,
+				validator,
+			))
+		}
+	}
+
+	sb.WriteString("<strong>Missed blocks thresholds:\n</strong>")
+	for _, group := range r.Config.MissedBlocksGroups {
 		sb.WriteString(fmt.Sprintf("%s %d - %d\n", group.EmojiStart, group.Start, group.End))
 	}
 
