@@ -389,8 +389,6 @@ func GetValidatorReportEntry(oldState, newState ValidatorState) (*ReportEntry, b
 		ValidatorAddress: newState.Address,
 		ValidatorMoniker: newState.Moniker,
 		MissingBlocks:    newState.MissedBlocks,
-		Emoji:            newGroup.EmojiStart,
-		Description:      newGroup.DescStart,
 	}
 
 	if oldState.MissedBlocks < newState.MissedBlocks {
@@ -401,6 +399,8 @@ func GetValidatorReportEntry(oldState, newState ValidatorState) (*ReportEntry, b
 			Int64("after", newState.MissedBlocks).
 			Msg("Validator's missed blocks increasing")
 		entry.Direction = INCREASING
+		entry.Emoji = newGroup.EmojiStart
+		entry.Description = newGroup.DescStart
 	} else {
 		// restoring
 		log.Debug().
@@ -409,6 +409,8 @@ func GetValidatorReportEntry(oldState, newState ValidatorState) (*ReportEntry, b
 			Int64("after", newState.MissedBlocks).
 			Msg("Validator's missed blocks decreasing")
 		entry.Direction = DECREASING
+		entry.Emoji = newGroup.EmojiEnd
+		entry.Description = newGroup.DescEnd
 	}
 
 	return entry, true
