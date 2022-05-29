@@ -549,6 +549,8 @@ func SetDefaultMissedBlocksGroups() {
 		})
 	}
 
+	groups[0].DescEnd = fmt.Sprintf("is recovered (< %.1f%%)", percents[1])
+
 	Config.MissedBlocksGroups = groups
 }
 
