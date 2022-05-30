@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"html"
 	"io/ioutil"
@@ -9,21 +8,21 @@ import (
 	"strings"
 	"time"
 
+	"github.com/BurntSushi/toml"
 	slashingtypes "github.com/cosmos/cosmos-sdk/x/slashing/types"
 	stakingtypes "github.com/cosmos/cosmos-sdk/x/staking/types"
-
-	"github.com/BurntSushi/toml"
+	"github.com/rs/zerolog"
 	tb "gopkg.in/tucnak/telebot.v2"
 )
 
 type TelegramReporter struct {
-	TelegramToken      string
-	TelegramChat       int
-	TelegramConfigPath string
-	TelegramConfig     TelegramConfig
-	Config             *AppConfig
+	Config *AppConfig
+	Params *Params
+	Client *TendermintGRPC
+	Logger zerolog.Logger
 
-	TelegramBot *tb.Bot
+	TelegramConfig TelegramConfig
+	TelegramBot    *tb.Bot
 }
 
 type NotificationInfo struct {
@@ -33,6 +32,20 @@ type NotificationInfo struct {
 
 type TelegramConfig struct {
 	NotiticationInfos []*NotificationInfo
+}
+
+func NewTelegramReporter(
+	config *AppConfig,
+	params *Params,
+	client *TendermintGRPC,
+	logger *zerolog.Logger,
+) *TelegramReporter {
+	return &TelegramReporter{
+		Config: config,
+		Params: params,
+		Client: client,
+		Logger: logger.With().Str("component", "telegram_reporter").Logger(),
+	}
 }
 
 func (i *NotificationInfo) addNotifier(notifier string) error {
@@ -110,12 +123,12 @@ func (r TelegramReporter) Serialize(report Report) string {
 		)
 
 		if entry.Direction == INCREASING {
-			timeToJail = fmt.Sprintf(" (%s till jail)", entry.GetTimeToJail())
+			timeToJail = fmt.Sprintf(" (%s till jail)", entry.GetTimeToJail(r.Params))
 		}
 
 		validatorLink = fmt.Sprintf(
 			"<a href=\"https://www.mintscan.io/%s/validators/%s\">%s</a>",
-			Config.MintscanPrefix,
+			r.Config.MintscanPrefix,
 			html.EscapeString(entry.ValidatorAddress),
 			entry.ValidatorMoniker,
 		)
@@ -136,17 +149,17 @@ func (r TelegramReporter) Serialize(report Report) string {
 }
 
 func (r *TelegramReporter) Init() {
-	if r.TelegramToken == "" || r.TelegramChat == 0 || r.TelegramConfigPath == "" {
-		log.Debug().Msg("Telegram credentials or config path not set, not creating Telegram reporter.")
+	if r.Config.TelegramConfig.Token == "" || r.Config.TelegramConfig.Chat == 0 || r.Config.TelegramConfig.ConfigPath == "" {
+		r.Logger.Debug().Msg("Telegram credentials or config path not set, not creating Telegram reporter.")
 		return
 	}
 
 	bot, err := tb.NewBot(tb.Settings{
-		Token:  Config.TelegramToken,
+		Token:  r.Config.TelegramConfig.Token,
 		Poller: &tb.LongPoller{Timeout: 10 * time.Second},
 	})
 	if err != nil {
-		log.Warn().Err(err).Msg("Could not create Telegram bot")
+		r.Logger.Warn().Err(err).Msg("Could not create Telegram bot")
 		return
 	}
 
@@ -170,7 +183,7 @@ func (r TelegramReporter) SendReport(report Report) error {
 	serializedReport := r.Serialize(report)
 	_, err := r.TelegramBot.Send(
 		&tb.User{
-			ID: r.TelegramChat,
+			ID: r.Config.TelegramConfig.Chat,
 		},
 		serializedReport,
 		tb.ModeHTML,
@@ -195,14 +208,14 @@ func (r TelegramReporter) sendMessage(message *tb.Message, text string) {
 		tb.NoPreview,
 	)
 	if err != nil {
-		log.Error().Err(err).Msg("Could not send Telegram message")
+		r.Logger.Error().Err(err).Msg("Could not send Telegram message")
 	}
 }
 
 func (r TelegramReporter) getHelp(message *tb.Message) {
 	var sb strings.Builder
 	sb.WriteString("<strong>missed-block-checker</strong>\n\n")
-	sb.WriteString(fmt.Sprintf("Query for the %s network info.\n", Config.MintscanPrefix))
+	sb.WriteString(fmt.Sprintf("Query for the %s network info.\n", r.Config.MintscanPrefix))
 	sb.WriteString("Can understand the following commands:\n")
 	sb.WriteString("- /subscribe &lt;validator address&gt; - be notified on validator's missed block in a Telegram channel\n")
 	sb.WriteString("- /unsubscribe &lt;validator address&gt; - undo the subscription given at the previous step\n")
@@ -222,7 +235,7 @@ func (r TelegramReporter) getHelp(message *tb.Message) {
 	sb.WriteString("- <a href=\"https://www.mintscan.io/osmosis/validators/osmovaloper16jn3383fn4v4vuuvgclr3q7rumeglw8kdq6e48\">Osmosis</a>\n")
 
 	r.sendMessage(message, sb.String())
-	log.Info().
+	r.Logger.Info().
 		Str("user", message.Sender.Username).
 		Msg("Successfully returned help info")
 }
@@ -235,11 +248,11 @@ func (r *TelegramReporter) getValidatorStatus(message *tb.Message) {
 	}
 
 	address := args[1]
-	log.Debug().Str("address", address).Msg("getValidatorStatus: address")
+	r.Logger.Debug().Str("address", address).Msg("getValidatorStatus: address")
 
-	validator, err := getValidator(address)
+	validator, err := r.Client.GetValidator(address)
 	if err != nil {
-		log.Error().
+		r.Logger.Error().
 			Str("address", address).
 			Err(err).
 			Msg("Could not get validators")
@@ -247,21 +260,21 @@ func (r *TelegramReporter) getValidatorStatus(message *tb.Message) {
 		return
 	}
 
-	signingInfo, err := getSigningInfo(validator)
+	signingInfo, err := r.Client.GetSigningInfo(validator)
 	if err != nil {
 		r.sendMessage(message, "Could not get missed blocks info")
 		return
 	}
 
-	r.sendMessage(message, getValidatorWithMissedBlocksSerialized(validator, signingInfo))
-	log.Info().
+	r.sendMessage(message, r.getValidatorWithMissedBlocksSerialized(validator, signingInfo))
+	r.Logger.Info().
 		Str("user", message.Sender.Username).
 		Str("address", address).
 		Msg("Successfully returned validator status")
 }
 
 func (r *TelegramReporter) getSubscribedValidatorsStatuses(message *tb.Message) {
-	log.Debug().Msg("getSubscribedValidatorsStatuses")
+	r.Logger.Debug().Msg("getSubscribedValidatorsStatuses")
 
 	subscribedValidators := r.TelegramConfig.getNotifiedValidators(message.Sender.Username)
 	if len(subscribedValidators) == 0 {
@@ -272,9 +285,9 @@ func (r *TelegramReporter) getSubscribedValidatorsStatuses(message *tb.Message) 
 	var sb strings.Builder
 
 	for _, address := range subscribedValidators {
-		validator, err := getValidator(address)
+		validator, err := r.Client.GetValidator(address)
 		if err != nil {
-			log.Error().
+			r.Logger.Error().
 				Str("address", address).
 				Err(err).
 				Msg("Could not get validators")
@@ -282,34 +295,37 @@ func (r *TelegramReporter) getSubscribedValidatorsStatuses(message *tb.Message) 
 			return
 		}
 
-		signingInfo, err := getSigningInfo(validator)
+		signingInfo, err := r.Client.GetSigningInfo(validator)
 		if err != nil {
 			r.sendMessage(message, "Could not get missed blocks info")
 			return
 		}
 
-		sb.WriteString(getValidatorWithMissedBlocksSerialized(validator, signingInfo))
+		sb.WriteString(r.getValidatorWithMissedBlocksSerialized(validator, signingInfo))
 		sb.WriteString("\n")
 	}
 
 	r.sendMessage(message, sb.String())
-	log.Info().
+	r.Logger.Info().
 		Str("user", message.Sender.Username).
 		Msg("Successfully returned subscribed validator statuses")
 }
 
-func getValidatorWithMissedBlocksSerialized(validator stakingtypes.Validator, signingInfo slashingtypes.ValidatorSigningInfo) string {
+func (r *TelegramReporter) getValidatorWithMissedBlocksSerialized(
+	validator stakingtypes.Validator,
+	signingInfo slashingtypes.ValidatorSigningInfo,
+) string {
 	var sb strings.Builder
 	sb.WriteString(fmt.Sprintf("<code>%s</code>\n", validator.Description.Moniker))
 	sb.WriteString(fmt.Sprintf(
 		"Missed blocks: %d/%d (%.2f%%)\n",
 		signingInfo.MissedBlocksCounter,
-		SignedBlocksWindow,
-		float64(signingInfo.MissedBlocksCounter)/float64(SignedBlocksWindow)*100,
+		r.Params.SignedBlocksWindow,
+		float64(signingInfo.MissedBlocksCounter)/float64(r.Params.SignedBlocksWindow)*100,
 	))
 	sb.WriteString(fmt.Sprintf(
 		"<a href=\"https://mintscan.io/%s/validators/%s\">Mintscan</a>\n",
-		Config.MintscanPrefix,
+		r.Config.MintscanPrefix,
 		validator.OperatorAddress,
 	))
 
@@ -329,11 +345,11 @@ func (r *TelegramReporter) subscribeToValidatorUpdates(message *tb.Message) {
 	}
 
 	address := args[1]
-	log.Debug().Str("address", address).Msg("subscribeToValidatorUpdates: address")
+	r.Logger.Debug().Str("address", address).Msg("subscribeToValidatorUpdates: address")
 
-	validator, err := getValidator(address)
+	validator, err := r.Client.GetValidator(address)
 	if err != nil {
-		log.Error().
+		r.Logger.Error().
 			Str("address", address).
 			Err(err).
 			Msg("Could not get validator")
@@ -354,12 +370,12 @@ func (r *TelegramReporter) subscribeToValidatorUpdates(message *tb.Message) {
 	sb.WriteString(fmt.Sprintf("Subscribed to the notification of <code>%s</code> ", validator.Description.Moniker))
 	sb.WriteString(fmt.Sprintf(
 		"<a href=\"https://mintscan.io/%s/validators/%s\">Mintscan</a>\n",
-		Config.MintscanPrefix,
+		r.Config.MintscanPrefix,
 		validator.OperatorAddress,
 	))
 
 	r.sendMessage(message, sb.String())
-	log.Info().
+	r.Logger.Info().
 		Str("user", message.Sender.Username).
 		Str("address", address).
 		Msg("Successfully subscribed to validator's notifications.")
@@ -378,11 +394,11 @@ func (r *TelegramReporter) unsubscribeFromValidatorUpdates(message *tb.Message) 
 	}
 
 	address := args[1]
-	log.Debug().Str("address", address).Msg("unsubscribeFromValidatorUpdates: address")
+	r.Logger.Debug().Str("address", address).Msg("unsubscribeFromValidatorUpdates: address")
 
-	validator, err := getValidator(address)
+	validator, err := r.Client.GetValidator(address)
 	if err != nil {
-		log.Error().
+		r.Logger.Error().
 			Str("address", address).
 			Err(err).
 			Msg("Could not get validator")
@@ -403,12 +419,12 @@ func (r *TelegramReporter) unsubscribeFromValidatorUpdates(message *tb.Message) 
 	sb.WriteString(fmt.Sprintf("Unsubscribed from the notification of <code>%s</code> ", validator.Description.Moniker))
 	sb.WriteString(fmt.Sprintf(
 		"<a href=\"https://mintscan.io/%s/validators/%s\">Mintscan</a>\n",
-		Config.MintscanPrefix,
+		r.Config.MintscanPrefix,
 		validator.OperatorAddress,
 	))
 
 	r.sendMessage(message, sb.String())
-	log.Info().
+	r.Logger.Info().
 		Str("user", message.Sender.Username).
 		Str("address", address).
 		Msg("Successfully unsubscribed from validator's notifications.")
@@ -425,7 +441,7 @@ func (r *TelegramReporter) displayConfig(message *tb.Message) {
 		for _, validator := range r.Config.ExcludeValidators {
 			sb.WriteString(fmt.Sprintf(
 				"- <a href=\"https://mintscan.io/%s/validators/%s\">%s</a>\n",
-				Config.MintscanPrefix,
+				r.Config.MintscanPrefix,
 				validator,
 				validator,
 			))
@@ -436,7 +452,7 @@ func (r *TelegramReporter) displayConfig(message *tb.Message) {
 		for _, validator := range r.Config.IncludeValidators {
 			sb.WriteString(fmt.Sprintf(
 				"- <a href=\"https://mintscan.io/%s/validators/%s\">%s</a>\n",
-				Config.MintscanPrefix,
+				r.Config.MintscanPrefix,
 				validator,
 				validator,
 			))
@@ -452,90 +468,40 @@ func (r *TelegramReporter) displayConfig(message *tb.Message) {
 }
 
 func (r *TelegramReporter) loadConfigFromYaml() {
-	if _, err := os.Stat(r.TelegramConfigPath); os.IsNotExist(err) {
-		log.Info().Str("path", r.TelegramConfigPath).Msg("Telegram config file does not exist, creating.")
-		if _, err = os.Create(r.TelegramConfigPath); err != nil {
-			log.Fatal().Err(err).Msg("Could not create Telegram config!")
+	if _, err := os.Stat(r.Config.TelegramConfig.ConfigPath); os.IsNotExist(err) {
+		r.Logger.Info().Str("path", r.Config.TelegramConfig.ConfigPath).Msg("Telegram config file does not exist, creating.")
+		if _, err = os.Create(r.Config.TelegramConfig.ConfigPath); err != nil {
+			r.Logger.Fatal().Err(err).Msg("Could not create Telegram config!")
 		}
 	} else if err != nil {
-		log.Fatal().Err(err).Msg("Could not fetch Telegram config!")
+		r.Logger.Fatal().Err(err).Msg("Could not fetch Telegram config!")
 	}
 
-	bytes, err := ioutil.ReadFile(r.TelegramConfigPath)
+	bytes, err := ioutil.ReadFile(r.Config.TelegramConfig.ConfigPath)
 	if err != nil {
-		log.Fatal().Err(err).Msg("Could not read Telegram config!")
+		r.Logger.Fatal().Err(err).Msg("Could not read Telegram config!")
 	}
 
 	var conf TelegramConfig
 	if _, err := toml.Decode(string(bytes), &conf); err != nil {
-		log.Fatal().Err(err).Msg("Could not load Telegram config!")
+		r.Logger.Fatal().Err(err).Msg("Could not load Telegram config!")
 	}
 
 	r.TelegramConfig = conf
-	log.Debug().Msg("Telegram config is loaded successfully.")
+	r.Logger.Debug().Msg("Telegram config is loaded successfully.")
 }
 
 func (r *TelegramReporter) saveYamlConfig() {
-	f, err := os.Create(r.TelegramConfigPath)
+	f, err := os.Create(r.Config.TelegramConfig.ConfigPath)
 	if err != nil {
-		log.Fatal().Err(err).Msg("Could not open Telegram config when saving")
+		r.Logger.Fatal().Err(err).Msg("Could not open Telegram config when saving")
 	}
 	if err := toml.NewEncoder(f).Encode(r.TelegramConfig); err != nil {
-		log.Fatal().Err(err).Msg("Could not save Telegram config")
+		r.Logger.Fatal().Err(err).Msg("Could not save Telegram config")
 	}
 	if err := f.Close(); err != nil {
-		log.Fatal().Err(err).Msg("Could not close Telegram config when saving")
+		r.Logger.Fatal().Err(err).Msg("Could not close Telegram config when saving")
 	}
 
-	log.Debug().Msg("Telegram config is updated successfully.")
-}
-
-func getValidator(address string) (stakingtypes.Validator, error) {
-	stakingClient := stakingtypes.NewQueryClient(grpcConn)
-
-	validatorResponse, err := stakingClient.Validator(
-		context.Background(),
-		&stakingtypes.QueryValidatorRequest{ValidatorAddr: address},
-	)
-	if err != nil {
-		return stakingtypes.Validator{}, err
-	}
-
-	return validatorResponse.Validator, nil
-}
-
-func getSigningInfo(validator stakingtypes.Validator) (slashingtypes.ValidatorSigningInfo, error) {
-	slashingClient := slashingtypes.NewQueryClient(grpcConn)
-
-	err := validator.UnpackInterfaces(interfaceRegistry) // Unpack interfaces, to populate the Anys' cached values
-	if err != nil {
-		log.Error().
-			Str("address", validator.OperatorAddress).
-			Err(err).
-			Msg("Could not get unpack validator inferfaces")
-		return slashingtypes.ValidatorSigningInfo{}, err
-	}
-
-	pubKey, err := validator.GetConsAddr()
-	if err != nil {
-		log.Error().
-			Str("address", validator.OperatorAddress).
-			Err(err).
-			Msg("Could not get validator pubkey")
-		return slashingtypes.ValidatorSigningInfo{}, err
-	}
-
-	signingInfosResponse, err := slashingClient.SigningInfo(
-		context.Background(),
-		&slashingtypes.QuerySigningInfoRequest{ConsAddress: pubKey.String()},
-	)
-	if err != nil {
-		log.Error().
-			Str("address", validator.OperatorAddress).
-			Err(err).
-			Msg("Could not get signing info")
-		return slashingtypes.ValidatorSigningInfo{}, err
-	}
-
-	return signingInfosResponse.ValSigningInfo, nil
+	r.Logger.Debug().Msg("Telegram config is updated successfully.")
 }

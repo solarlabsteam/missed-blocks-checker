@@ -1,0 +1,88 @@
+# Bech prefixes for network.
+bech-prefix = "cosmos"
+# If a network has specific bech prefixes for validator and for consensus node
+# and their pubkeys, it's possible to specify them separately.
+bech-validator-prefix = "cosmosvaloper"
+bech-validator-pubkey-prefix = "cosmosvaloperpub"
+bech-consensus-node-prefix = "cosmosvalcons"
+bech-consensus-node-pubkey-prefix = "cosmosvalconspub"
+# Log level. Defaults to 'info', you can set it to 'debug' or even 'trace'
+# to make it more verbose.
+log-level = "info"
+# Log all output in JSON except for fatal errors, useful if you are using
+# logging aggregation solutions such as ELK stack.
+json = true
+# Scrape interval, in seconds. Defaults to 120
+interval = 120
+# Pagination limit, defaults to 1000.
+limit = 1000
+# Mintscan prefix, to generate links to validator.
+mintscan-prefix = "cosmos"
+# gRPC node address to get signing info and validators info from, defaults to localhost:9090
+node-address = "localhost:9090"
+# Tendermint RPC node to get block info from. Defaults to http://localhost:26657.
+tendermint-rpc-address = "http://localhost:26657"
+# List of validators to monitor, with it specified, only the selected validators
+# will be monitored. Cannot be used together with exclude-validators.
+# If both include-validators and exclude-validators are not specified,
+# all validators will be monitored.
+include-validators = ["cosmosvaloperxxx"]
+# List of validators to exclude from monitoring, with it specified, all validators except mentioned
+# will be monitored. Cannot be used together with include-validators.
+exclude-validators = ["cosmosvaloperyyy"]
+
+# List of missed blocks groups.
+[[missed-blocks-groups]]
+# Start value of missed blocks. If a validator's missed blocks counter is between this
+# and end value, it will fall under this group.
+start = 0
+# End value of missed blocks
+end = 999
+# Emoji displayed when a validator enters this group.
+emoji-start = "🟡"
+# Emoji displayed when a validator leaves this group.
+emoji-end = "🟢"
+# Description displayed when a validator enters this group.
+desc-start = "is skipping blocks (0-10%)"
+# Description displayed when a validator leaves this group.
+desc-end = "is recovered (<10%)"
+
+[[missed-blocks-groups]]
+start = 1000
+end = 4999
+emoji-start = "🟠"
+emoji-end = "🟡"
+desc-start = "is skipping blocks (>10%)"
+desc-end = "is recovering (<50%)"
+
+[[missed-blocks-groups]]
+start = 5000
+end = 8999
+emoji-start = "🔴"
+emoji-end = "🟠"
+desc-start = "is skipping blocks (>50%)"
+desc-end = "is recovering (<90%)"
+
+[[missed-blocks-groups]]
+start = 9000
+end = 10000
+emoji-start = "🔴"
+emoji-end = "🟠"
+desc-start = "is skipping blocks (>90%)"
+desc-end = "is recovering (90-100%)"
+
+# Telegram reporter. All fields are mandatory, otherwise the reporter won't be enabled.
+[telegram]
+# A Telegram bot token.
+token = "111:222"
+# A Telegram chat to send messages to.
+chat = -123
+# Path to a file storing all information about people's links to validators.
+config-path = "/home/user/config/missed-blocks-checker-telegram-labels.toml"
+
+# Slack reporter. All fields are mandatory, otherwise the reporter won't be enabled.
+[slack]
+# A Slack bot token.
+token = "xorb-xxxyyyy"
+# A Slack channel or username to send messages to.
+chat = "#general"
