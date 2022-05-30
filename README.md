@@ -78,7 +78,6 @@ You can pass the artuments to the executable file to configure it. Here is the p
 - `--limit` - pagination limit for gRPC requests. Defaults to 1000.
 - `--telegram-token` - Telegram bot token
 - `--telegram-chat` - Telegram user or chat ID
-- `--threshold` - If the missed blocks count is below this value, the messages are not sent. Defaults to 0.
 - `--mintscan-prefix` - This bot generates links to Mintscan for validators, using this prefix. Links have the following format: `https://mintscan.io/<mintscan-prefix>/validator/<validator ID>`. Defaults to `persistence`.
 - `--interval` - Interval between the two checks, in seconds. Defaults to 120
 - `--include` - a comma-separated list of validators' operators addresses. If specified, only the validators from this list would be monitored.
