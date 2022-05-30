@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"html"
 	"io/ioutil"
 	"os"
 	"strings"
@@ -20,6 +21,7 @@ type TelegramReporter struct {
 	TelegramChat       int
 	TelegramConfigPath string
 	TelegramConfig     TelegramConfig
+	Config             *AppConfig
 
 	TelegramBot *tb.Bot
 }
@@ -103,59 +105,28 @@ func (r TelegramReporter) Serialize(report Report) string {
 
 	for _, entry := range report.Entries {
 		var (
-			emoji         string
-			status        string
 			validatorLink string
-			timeToJail    string = ""
+			timeToJail    = ""
 		)
 
-		switch entry.Direction {
-		case START_MISSING_BLOCKS:
-			emoji = "🚨"
-			status = "is missing blocks"
+		if entry.Direction == INCREASING {
 			timeToJail = fmt.Sprintf(" (%s till jail)", entry.GetTimeToJail())
-		case MISSING_BLOCKS:
-			emoji = "🔴"
-			status = "is missing blocks"
-			timeToJail = fmt.Sprintf(" (%s till jail)", entry.GetTimeToJail())
-		case STOPPED_MISSING_BLOCKS:
-			emoji = "🟡"
-			status = "stopped missing blocks"
-		case WENT_BACK_TO_NORMAL:
-			emoji = "🟢"
-			status = "went back to normal"
-		case JAILED:
-			emoji = "❌"
-			status = "was jailed"
 		}
 
-		if entry.ValidatorAddress != "" && entry.ValidatorMoniker != "" {
-			validatorLink = fmt.Sprintf(
-				"<a href=\"https://www.mintscan.io/%s/validators/%s\">%s</a>",
-				MintscanPrefix,
-				entry.ValidatorAddress,
-				entry.ValidatorMoniker,
-			)
-		} else if entry.ValidatorMoniker == "" { // validator with empty moniker, can happen
-			validatorLink = fmt.Sprintf(
-				"<a href=\"https://www.mintscan.io/%s/validators/%s\">%s</a>",
-				MintscanPrefix,
-				entry.ValidatorAddress,
-				entry.ValidatorAddress,
-			)
-		} else {
-			validatorLink = fmt.Sprintf("<code>%s</code>", entry.Pubkey)
-		}
+		validatorLink = fmt.Sprintf(
+			"<a href=\"https://www.mintscan.io/%s/validators/%s\">%s</a>",
+			Config.MintscanPrefix,
+			html.EscapeString(entry.ValidatorAddress),
+			entry.ValidatorMoniker,
+		)
 
 		notifiers := r.TelegramConfig.getNotifiersSerialized(entry.ValidatorAddress)
 
 		sb.WriteString(fmt.Sprintf(
-			"%s <strong>%s %s</strong>: %d -> %d%s %s\n",
-			emoji,
+			"%s <strong>%s %s</strong>%s %s\n",
+			entry.Emoji,
 			validatorLink,
-			status,
-			entry.BeforeBlocksMissing,
-			entry.NowBlocksMissing,
+			html.EscapeString(entry.Description),
 			timeToJail,
 			notifiers,
 		))
@@ -171,10 +142,9 @@ func (r *TelegramReporter) Init() {
 	}
 
 	bot, err := tb.NewBot(tb.Settings{
-		Token:  TelegramToken,
+		Token:  Config.TelegramToken,
 		Poller: &tb.LongPoller{Timeout: 10 * time.Second},
 	})
-
 	if err != nil {
 		log.Warn().Err(err).Msg("Could not create Telegram bot")
 		return
@@ -186,6 +156,7 @@ func (r *TelegramReporter) Init() {
 	r.TelegramBot.Handle("/status", r.getValidatorStatus)
 	r.TelegramBot.Handle("/subscribe", r.subscribeToValidatorUpdates)
 	r.TelegramBot.Handle("/unsubscribe", r.unsubscribeFromValidatorUpdates)
+	r.TelegramBot.Handle("/config", r.displayConfig)
 	go r.TelegramBot.Start()
 
 	r.loadConfigFromYaml()
@@ -223,7 +194,6 @@ func (r TelegramReporter) sendMessage(message *tb.Message, text string) {
 		},
 		tb.NoPreview,
 	)
-
 	if err != nil {
 		log.Error().Err(err).Msg("Could not send Telegram message")
 	}
@@ -232,11 +202,12 @@ func (r TelegramReporter) sendMessage(message *tb.Message, text string) {
 func (r TelegramReporter) getHelp(message *tb.Message) {
 	var sb strings.Builder
 	sb.WriteString("<strong>missed-block-checker</strong>\n\n")
-	sb.WriteString(fmt.Sprintf("Query for the %s network info.\n", MintscanPrefix))
+	sb.WriteString(fmt.Sprintf("Query for the %s network info.\n", Config.MintscanPrefix))
 	sb.WriteString("Can understand the following commands:\n")
 	sb.WriteString("- /subscribe &lt;validator address&gt; - be notified on validator's missed block in a Telegram channel\n")
 	sb.WriteString("- /unsubscribe &lt;validator address&gt; - undo the subscription given at the previous step\n")
 	sb.WriteString("- /status &lt;validator address&gt; - get validator missed blocks\n")
+	sb.WriteString("- /config - display bot config\n")
 	sb.WriteString("- /status - get the missed blocks of the validator(s) you're subscribed to\n\n")
 	sb.WriteString("Created by <a href=\"https://freak12techno.github.io\">freak12techno</a> at <a href=\"https://validator.solar\">SOLAR Labs</a> with ❤️.\n")
 	sb.WriteString("This bot is open-sourced, you can get the source code at https://github.com/solarlabsteam/missed-blocks-checker.\n\n")
@@ -267,7 +238,6 @@ func (r *TelegramReporter) getValidatorStatus(message *tb.Message) {
 	log.Debug().Str("address", address).Msg("getValidatorStatus: address")
 
 	validator, err := getValidator(address)
-
 	if err != nil {
 		log.Error().
 			Str("address", address).
@@ -303,7 +273,6 @@ func (r *TelegramReporter) getSubscribedValidatorsStatuses(message *tb.Message) 
 
 	for _, address := range subscribedValidators {
 		validator, err := getValidator(address)
-
 		if err != nil {
 			log.Error().
 				Str("address", address).
@@ -340,7 +309,7 @@ func getValidatorWithMissedBlocksSerialized(validator stakingtypes.Validator, si
 	))
 	sb.WriteString(fmt.Sprintf(
 		"<a href=\"https://mintscan.io/%s/validators/%s\">Mintscan</a>\n",
-		MintscanPrefix,
+		Config.MintscanPrefix,
 		validator.OperatorAddress,
 	))
 
@@ -363,7 +332,6 @@ func (r *TelegramReporter) subscribeToValidatorUpdates(message *tb.Message) {
 	log.Debug().Str("address", address).Msg("subscribeToValidatorUpdates: address")
 
 	validator, err := getValidator(address)
-
 	if err != nil {
 		log.Error().
 			Str("address", address).
@@ -386,7 +354,7 @@ func (r *TelegramReporter) subscribeToValidatorUpdates(message *tb.Message) {
 	sb.WriteString(fmt.Sprintf("Subscribed to the notification of <code>%s</code> ", validator.Description.Moniker))
 	sb.WriteString(fmt.Sprintf(
 		"<a href=\"https://mintscan.io/%s/validators/%s\">Mintscan</a>\n",
-		MintscanPrefix,
+		Config.MintscanPrefix,
 		validator.OperatorAddress,
 	))
 
@@ -413,7 +381,6 @@ func (r *TelegramReporter) unsubscribeFromValidatorUpdates(message *tb.Message) 
 	log.Debug().Str("address", address).Msg("unsubscribeFromValidatorUpdates: address")
 
 	validator, err := getValidator(address)
-
 	if err != nil {
 		log.Error().
 			Str("address", address).
@@ -436,7 +403,7 @@ func (r *TelegramReporter) unsubscribeFromValidatorUpdates(message *tb.Message) 
 	sb.WriteString(fmt.Sprintf("Unsubscribed from the notification of <code>%s</code> ", validator.Description.Moniker))
 	sb.WriteString(fmt.Sprintf(
 		"<a href=\"https://mintscan.io/%s/validators/%s\">Mintscan</a>\n",
-		MintscanPrefix,
+		Config.MintscanPrefix,
 		validator.OperatorAddress,
 	))
 
@@ -445,6 +412,43 @@ func (r *TelegramReporter) unsubscribeFromValidatorUpdates(message *tb.Message) 
 		Str("user", message.Sender.Username).
 		Str("address", address).
 		Msg("Successfully unsubscribed from validator's notifications.")
+}
+
+func (r *TelegramReporter) displayConfig(message *tb.Message) {
+	var sb strings.Builder
+
+	if len(r.Config.ExcludeValidators) == 0 && len(r.Config.IncludeValidators) == 0 {
+		sb.WriteString("<strong>Monitoring all validators.\n</strong>")
+	} else if len(r.Config.IncludeValidators) == 0 {
+		sb.WriteString("<strong>Monitoring all validators, except the following ones:\n</strong>")
+
+		for _, validator := range r.Config.ExcludeValidators {
+			sb.WriteString(fmt.Sprintf(
+				"- <a href=\"https://mintscan.io/%s/validators/%s\">%s</a>\n",
+				Config.MintscanPrefix,
+				validator,
+				validator,
+			))
+		}
+	} else if len(r.Config.ExcludeValidators) == 0 {
+		sb.WriteString("<strong>Monitoring the following validators:\n</strong>")
+
+		for _, validator := range r.Config.IncludeValidators {
+			sb.WriteString(fmt.Sprintf(
+				"- <a href=\"https://mintscan.io/%s/validators/%s\">%s</a>\n",
+				Config.MintscanPrefix,
+				validator,
+				validator,
+			))
+		}
+	}
+
+	sb.WriteString("<strong>Missed blocks thresholds:\n</strong>")
+	for _, group := range r.Config.MissedBlocksGroups {
+		sb.WriteString(fmt.Sprintf("%s %d - %d\n", group.EmojiStart, group.Start, group.End))
+	}
+
+	r.sendMessage(message, sb.String())
 }
 
 func (r *TelegramReporter) loadConfigFromYaml() {
@@ -493,7 +497,6 @@ func getValidator(address string) (stakingtypes.Validator, error) {
 		context.Background(),
 		&stakingtypes.QueryValidatorRequest{ValidatorAddr: address},
 	)
-
 	if err != nil {
 		return stakingtypes.Validator{}, err
 	}
@@ -526,7 +529,6 @@ func getSigningInfo(validator stakingtypes.Validator) (slashingtypes.ValidatorSi
 		context.Background(),
 		&slashingtypes.QuerySigningInfoRequest{ConsAddress: pubKey.String()},
 	)
-
 	if err != nil {
 		log.Error().
 			Str("address", validator.OperatorAddress).

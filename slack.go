@@ -19,57 +19,26 @@ func (r SlackReporter) Serialize(report Report) string {
 
 	for _, entry := range report.Entries {
 		var (
-			emoji         string
-			status        string
 			validatorLink string
-			timeToJail    string = ""
+			timeToJail    = ""
 		)
 
-		switch entry.Direction {
-		case START_MISSING_BLOCKS:
-			emoji = "🚨"
-			status = "is missing blocks"
+		if entry.Direction == INCREASING {
 			timeToJail = fmt.Sprintf(" (%s till jail)", entry.GetTimeToJail())
-		case MISSING_BLOCKS:
-			emoji = "🔴"
-			status = "is missing blocks"
-			timeToJail = fmt.Sprintf(" (%s till jail)", entry.GetTimeToJail())
-		case STOPPED_MISSING_BLOCKS:
-			emoji = "🟡"
-			status = "stopped missing blocks"
-		case WENT_BACK_TO_NORMAL:
-			emoji = "🟢"
-			status = "went back to normal"
-		case JAILED:
-			emoji = "❌"
-			status = "was jailed"
 		}
 
-		if entry.ValidatorAddress != "" && entry.ValidatorMoniker != "" {
-			validatorLink = fmt.Sprintf(
-				"<https://www.mintscan.io/%s/validators/%s|%s>",
-				MintscanPrefix,
-				entry.ValidatorAddress,
-				entry.ValidatorMoniker,
-			)
-		} else if entry.ValidatorMoniker == "" { // validator with empty moniker, can happen
-			validatorLink = fmt.Sprintf(
-				"<https://www.mintscan.io/%s/validators/%s|%s>",
-				MintscanPrefix,
-				entry.ValidatorAddress,
-				entry.ValidatorAddress,
-			)
-		} else {
-			validatorLink = fmt.Sprintf("`%s`", entry.Pubkey)
-		}
+		validatorLink = fmt.Sprintf(
+			"<a href=\"https://www.mintscan.io/%s/validators/%s\">%s</a>",
+			Config.MintscanPrefix,
+			entry.ValidatorAddress,
+			entry.ValidatorMoniker,
+		)
 
 		sb.WriteString(fmt.Sprintf(
-			"%s *%s %s*: %d -> %d%s\n",
-			emoji,
+			"%s <strong>%s %s</strong>%s\n",
+			entry.Emoji,
 			validatorLink,
-			status,
-			entry.BeforeBlocksMissing,
-			entry.NowBlocksMissing,
+			entry.Description,
 			timeToJail,
 		))
 	}
