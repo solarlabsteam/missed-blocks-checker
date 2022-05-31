@@ -28,7 +28,7 @@ func NewReportGenerator(
 		Params:   params,
 		gRPC:     grpc,
 		Config:   config,
-		Logger:   logger.With().Str("component", "grpc").Logger(),
+		Logger:   logger.With().Str("component", "report_generator").Logger(),
 		Registry: registry,
 	}
 }
