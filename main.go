@@ -27,10 +27,6 @@ func Execute(configPath string) {
 
 	log := GetLogger(appConfig.LogConfig)
 
-	log.Info().
-		Str("config", fmt.Sprintf("%+v", appConfig)).
-		Msg("Started with following parameters")
-
 	if len(appConfig.IncludeValidators) == 0 && len(appConfig.ExcludeValidators) == 0 {
 		log.Info().Msg("Monitoring all validators")
 	} else if len(appConfig.IncludeValidators) != 0 {
@@ -62,14 +58,13 @@ func Execute(configPath string) {
 		Msg("Chain params calculated")
 
 	appConfig.SetDefaultMissedBlocksGroups(params)
-
-	log.Info().
-		Str("groups", fmt.Sprintf("%+v", appConfig.MissedBlocksGroups)).
-		Msg("Using the following MissedBlocksGroups")
-
 	if err := appConfig.MissedBlocksGroups.Validate(params.SignedBlocksWindow); err != nil {
 		log.Fatal().Err(err).Msg("MissedBlockGroups config is invalid")
 	}
+
+	log.Info().
+		Str("config", fmt.Sprintf("%+v", appConfig)).
+		Msg("Started with following parameters")
 
 	reporters := []Reporter{
 		NewTelegramReporter(appConfig.ChainInfoConfig, appConfig.TelegramConfig, appConfig, &params, grpc, log),
