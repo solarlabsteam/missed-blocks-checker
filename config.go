@@ -128,19 +128,19 @@ func (config *AppConfig) SetBechPrefixes() {
 
 	if config.Prefix == "" && config.ValidatorPubkeyPrefix == "" {
 		GetDefaultLogger().Fatal().Msg("Both bech-validator-pubkey-prefix and bech-prefix are not set!")
-	} else if config.ValidatorPrefix == "" {
+	} else if config.ValidatorPubkeyPrefix == "" {
 		config.ValidatorPubkeyPrefix = config.Prefix + "valoperpub"
 	}
 
 	if config.Prefix == "" && config.ConsensusNodePrefix == "" {
 		GetDefaultLogger().Fatal().Msg("Both bech-consensus-node-prefix and bech-prefix are not set!")
-	} else if config.ValidatorPrefix == "" {
+	} else if config.ConsensusNodePrefix == "" {
 		config.ConsensusNodePrefix = config.Prefix + "valcons"
 	}
 
 	if config.Prefix == "" && config.ConsensusNodePubkeyPrefix == "" {
 		GetDefaultLogger().Fatal().Msg("Both bech-consensus-node-pubkey-prefix and bech-prefix are not set!")
-	} else if config.ValidatorPrefix == "" {
+	} else if config.ConsensusNodePubkeyPrefix == "" {
 		config.ConsensusNodePubkeyPrefix = config.Prefix + "valconspub"
 	}
 }
