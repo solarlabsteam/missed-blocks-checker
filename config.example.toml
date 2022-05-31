@@ -8,14 +8,6 @@ bech-consensus-node-prefix = "cosmosvalcons"
 bech-consensus-node-pubkey-prefix = "cosmosvalconspub"
 # Scrape interval, in seconds. Defaults to 120
 interval = 120
-# Pagination limit, defaults to 1000.
-limit = 1000
-# Mintscan prefix, to generate links to validator.
-mintscan-prefix = "cosmos"
-# gRPC node address to get signing info and validators info from, defaults to localhost:9090
-node-address = "localhost:9090"
-# Tendermint RPC node to get block info from. Defaults to http://localhost:26657.
-tendermint-rpc-address = "http://localhost:26657"
 # List of validators to monitor, with it specified, only the selected validators
 # will be monitored. Cannot be used together with exclude-validators.
 # If both include-validators and exclude-validators are not specified,
@@ -25,6 +17,13 @@ include-validators = ["cosmosvaloperxxx"]
 # will be monitored. Cannot be used together with include-validators.
 exclude-validators = ["cosmosvaloperyyy"]
 
+# Node config.
+[node]
+# gRPC node address to get signing info and validators info from, defaults to localhost:9090
+grpc-address = "localhost:9090"
+# Tendermint RPC node to get block info from. Defaults to http://localhost:26657.
+rpc-address = "http://localhost:26657"
+
 # Logging config.
 [log]
 # Log level. Defaults to 'info', you can set it to 'debug' or even 'trace'
@@ -33,6 +32,11 @@ level = "info"
 # Log all output in JSON except for fatal errors, useful if you are using
 # logging aggregation solutions such as ELK stack.
 json = true
+
+# Chain info config.
+[chain-info]
+# Mintscan prefix, to generate links to validator.
+mintscan-prefix = "cosmos"
 
 # List of missed blocks groups.
 [[missed-blocks-groups]]

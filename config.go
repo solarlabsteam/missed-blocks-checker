@@ -28,14 +28,17 @@ type ChainInfoConfig struct {
 	MintscanPrefix string `toml:"mintscan-prefix"`
 }
 
+type NodeConfig struct {
+	GrpcAddress   string `toml:"grpc-address" default:"localhost:9090"`
+	TendermintRPC string `toml:"rpc-address" default:"http://localhost:26657"`
+}
+
 type AppConfig struct {
 	LogConfig       LogConfig       `toml:"log"`
 	ChainInfoConfig ChainInfoConfig `toml:"chain-info"`
+	NodeConfig      NodeConfig      `toml:"node"`
 
-	Interval      int    `toml:"interval" default:"120"`
-	Limit         uint64 `toml:"limit" default:"1000"`
-	NodeAddress   string `toml:"node-address" default:"localhost:9090"`
-	TendermintRPC string `toml:"tendermint-rpc" default:"http://localhost:26657"`
+	Interval int `toml:"interval" default:"120"`
 
 	Prefix                    string `toml:"bech-prefix"`
 	ValidatorPrefix           string `toml:"bech-validator-prefix"`

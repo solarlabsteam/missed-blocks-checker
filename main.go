@@ -46,8 +46,8 @@ func Execute(configPath string) {
 	encCfg := simapp.MakeTestEncodingConfig()
 	interfaceRegistry := encCfg.InterfaceRegistry
 
-	rpc := NewTendermintRPC(appConfig.TendermintRPC, log)
-	grpc := NewTendermintGRPC(appConfig.NodeAddress, appConfig.Limit, interfaceRegistry, log)
+	rpc := NewTendermintRPC(appConfig.NodeConfig, log)
+	grpc := NewTendermintGRPC(appConfig.NodeConfig, interfaceRegistry, log)
 	slashingParams := grpc.GetSlashingParams()
 
 	params := Params{

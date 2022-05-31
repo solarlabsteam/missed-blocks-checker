@@ -9,14 +9,14 @@ import (
 )
 
 type TendermintRPC struct {
-	URL                 string
+	NodeConfig          NodeConfig
 	BlocksDiffInThePast int64
 	Logger              zerolog.Logger
 }
 
-func NewTendermintRPC(url string, logger *zerolog.Logger) *TendermintRPC {
+func NewTendermintRPC(nodeConfig NodeConfig, logger *zerolog.Logger) *TendermintRPC {
 	return &TendermintRPC{
-		URL:                 url,
+		NodeConfig:          nodeConfig,
 		BlocksDiffInThePast: 100,
 		Logger:              logger.With().Str("component", "rpc").Logger(),
 	}
@@ -35,7 +35,7 @@ func (rpc *TendermintRPC) GetAvgBlockTime() float64 {
 }
 
 func (rpc *TendermintRPC) GetBlock(height *int64) *ctypes.Block {
-	client, err := tmrpc.New(rpc.URL, "/websocket")
+	client, err := tmrpc.New(rpc.NodeConfig.TendermintRPC, "/websocket")
 	if err != nil {
 		rpc.Logger.Fatal().Err(err).Msg("Could not create Tendermint client")
 	}
