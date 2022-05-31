@@ -25,7 +25,7 @@ func Execute(configPath string) {
 	appConfig.SetBechPrefixes() // will exit if not valid
 	SetSdkConfigPrefixes(appConfig)
 
-	log := GetLogger(appConfig)
+	log := GetLogger(appConfig.LogConfig)
 
 	log.Info().
 		Str("config", fmt.Sprintf("%+v", appConfig)).
@@ -72,8 +72,8 @@ func Execute(configPath string) {
 	}
 
 	reporters := []Reporter{
-		NewTelegramReporter(appConfig, &params, grpc, log),
-		NewSlackReporter(appConfig, &params, log),
+		NewTelegramReporter(appConfig.ChainInfoConfig, appConfig.TelegramConfig, appConfig, &params, grpc, log),
+		NewSlackReporter(appConfig.ChainInfoConfig, appConfig.SlackConfig, &params, log),
 	}
 
 	for _, reporter := range reporters {

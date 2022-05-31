@@ -19,14 +19,23 @@ type SlackConfig struct {
 	Chat  string `toml:"chat"`
 }
 
-type AppConfig struct {
-	LogLevel       string `toml:"log-level" default:"info"`
-	JSONOutput     bool   `toml:"json-output" default:"false"`
-	Interval       int    `toml:"interval" default:"120"`
-	Limit          uint64 `toml:"limit" default:"1000"`
+type LogConfig struct {
+	LogLevel   string `toml:"level" default:"info"`
+	JSONOutput bool   `toml:"json" default:"false"`
+}
+
+type ChainInfoConfig struct {
 	MintscanPrefix string `toml:"mintscan-prefix"`
-	NodeAddress    string `toml:"node-address" default:"localhost:9090"`
-	TendermintRPC  string `toml:"tendermint-rpc" default:"http://localhost:26657"`
+}
+
+type AppConfig struct {
+	LogConfig       LogConfig       `toml:"log"`
+	ChainInfoConfig ChainInfoConfig `toml:"chain-info"`
+
+	Interval      int    `toml:"interval" default:"120"`
+	Limit         uint64 `toml:"limit" default:"1000"`
+	NodeAddress   string `toml:"node-address" default:"localhost:9090"`
+	TendermintRPC string `toml:"tendermint-rpc" default:"http://localhost:26657"`
 
 	Prefix                    string `toml:"bech-prefix"`
 	ValidatorPrefix           string `toml:"bech-validator-prefix"`

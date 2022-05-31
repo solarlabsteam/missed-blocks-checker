@@ -9,18 +9,25 @@ import (
 )
 
 type SlackReporter struct {
-	Config *AppConfig
-	Params *Params
-	Logger zerolog.Logger
+	ChainInfoConfig ChainInfoConfig
+	SlackConfig     SlackConfig
+	Params          *Params
+	Logger          zerolog.Logger
 
 	SlackClient slack.Client
 }
 
-func NewSlackReporter(config *AppConfig, params *Params, logger *zerolog.Logger) *SlackReporter {
+func NewSlackReporter(
+	chainInfoConfig ChainInfoConfig,
+	slackConfig SlackConfig,
+	params *Params,
+	logger *zerolog.Logger,
+) *SlackReporter {
 	return &SlackReporter{
-		Config: config,
-		Params: params,
-		Logger: logger.With().Str("component", "slack_reporter").Logger(),
+		ChainInfoConfig: chainInfoConfig,
+		SlackConfig:     slackConfig,
+		Params:          params,
+		Logger:          logger.With().Str("component", "slack_reporter").Logger(),
 	}
 }
 
@@ -39,7 +46,7 @@ func (r SlackReporter) Serialize(report Report) string {
 
 		validatorLink = fmt.Sprintf(
 			"<a href=\"https://www.mintscan.io/%s/validators/%s\">%s</a>",
-			r.Config.MintscanPrefix,
+			r.ChainInfoConfig.MintscanPrefix,
 			entry.ValidatorAddress,
 			entry.ValidatorMoniker,
 		)
@@ -57,23 +64,23 @@ func (r SlackReporter) Serialize(report Report) string {
 }
 
 func (r *SlackReporter) Init() {
-	if r.Config.SlackConfig.Token == "" || r.Config.SlackConfig.Chat == "" {
+	if r.SlackConfig.Token == "" || r.SlackConfig.Chat == "" {
 		r.Logger.Debug().Msg("Slack credentials not set, not creating Slack reporter.")
 		return
 	}
 
-	client := slack.New(r.Config.SlackConfig.Token)
+	client := slack.New(r.SlackConfig.Token)
 	r.SlackClient = *client
 }
 
 func (r SlackReporter) Enabled() bool {
-	return r.Config.SlackConfig.Token != "" && r.Config.SlackConfig.Chat != ""
+	return r.SlackConfig.Token != "" && r.SlackConfig.Chat != ""
 }
 
 func (r SlackReporter) SendReport(report Report) error {
 	serializedReport := r.Serialize(report)
 	_, _, err := r.SlackClient.PostMessage(
-		r.Config.SlackConfig.Chat,
+		r.SlackConfig.Chat,
 		slack.MsgOptionText(serializedReport, false),
 		slack.MsgOptionDisableLinkUnfurl(),
 	)

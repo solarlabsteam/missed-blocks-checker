@@ -6,12 +6,6 @@ bech-validator-prefix = "cosmosvaloper"
 bech-validator-pubkey-prefix = "cosmosvaloperpub"
 bech-consensus-node-prefix = "cosmosvalcons"
 bech-consensus-node-pubkey-prefix = "cosmosvalconspub"
-# Log level. Defaults to 'info', you can set it to 'debug' or even 'trace'
-# to make it more verbose.
-log-level = "info"
-# Log all output in JSON except for fatal errors, useful if you are using
-# logging aggregation solutions such as ELK stack.
-json = true
 # Scrape interval, in seconds. Defaults to 120
 interval = 120
 # Pagination limit, defaults to 1000.
@@ -30,6 +24,15 @@ include-validators = ["cosmosvaloperxxx"]
 # List of validators to exclude from monitoring, with it specified, all validators except mentioned
 # will be monitored. Cannot be used together with include-validators.
 exclude-validators = ["cosmosvaloperyyy"]
+
+# Logging config.
+[log]
+# Log level. Defaults to 'info', you can set it to 'debug' or even 'trace'
+# to make it more verbose.
+level = "info"
+# Log all output in JSON except for fatal errors, useful if you are using
+# logging aggregation solutions such as ELK stack.
+json = true
 
 # List of missed blocks groups.
 [[missed-blocks-groups]]

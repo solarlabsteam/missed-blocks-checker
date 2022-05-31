@@ -16,10 +16,12 @@ import (
 )
 
 type TelegramReporter struct {
-	Config *AppConfig
-	Params *Params
-	Client *TendermintGRPC
-	Logger zerolog.Logger
+	ChainInfoConfig   ChainInfoConfig
+	TelegramAppConfig TelegramAppConfig
+	AppConfig         *AppConfig
+	Params            *Params
+	Client            *TendermintGRPC
+	Logger            zerolog.Logger
 
 	TelegramConfig TelegramConfig
 	TelegramBot    *tb.Bot
@@ -35,16 +37,20 @@ type TelegramConfig struct {
 }
 
 func NewTelegramReporter(
-	config *AppConfig,
+	chainInfoConfig ChainInfoConfig,
+	telegramAppConfig TelegramAppConfig,
+	appConfig *AppConfig,
 	params *Params,
 	client *TendermintGRPC,
 	logger *zerolog.Logger,
 ) *TelegramReporter {
 	return &TelegramReporter{
-		Config: config,
-		Params: params,
-		Client: client,
-		Logger: logger.With().Str("component", "telegram_reporter").Logger(),
+		ChainInfoConfig:   chainInfoConfig,
+		TelegramAppConfig: telegramAppConfig,
+		AppConfig:         appConfig,
+		Params:            params,
+		Client:            client,
+		Logger:            logger.With().Str("component", "telegram_reporter").Logger(),
 	}
 }
 
@@ -128,7 +134,7 @@ func (r TelegramReporter) Serialize(report Report) string {
 
 		validatorLink = fmt.Sprintf(
 			"<a href=\"https://www.mintscan.io/%s/validators/%s\">%s</a>",
-			r.Config.MintscanPrefix,
+			r.ChainInfoConfig.MintscanPrefix,
 			html.EscapeString(entry.ValidatorAddress),
 			entry.ValidatorMoniker,
 		)
@@ -149,13 +155,13 @@ func (r TelegramReporter) Serialize(report Report) string {
 }
 
 func (r *TelegramReporter) Init() {
-	if r.Config.TelegramConfig.Token == "" || r.Config.TelegramConfig.Chat == 0 || r.Config.TelegramConfig.ConfigPath == "" {
+	if r.TelegramAppConfig.Token == "" || r.TelegramAppConfig.Chat == 0 || r.TelegramAppConfig.ConfigPath == "" {
 		r.Logger.Debug().Msg("Telegram credentials or config path not set, not creating Telegram reporter.")
 		return
 	}
 
 	bot, err := tb.NewBot(tb.Settings{
-		Token:  r.Config.TelegramConfig.Token,
+		Token:  r.TelegramAppConfig.Token,
 		Poller: &tb.LongPoller{Timeout: 10 * time.Second},
 	})
 	if err != nil {
@@ -183,7 +189,7 @@ func (r TelegramReporter) SendReport(report Report) error {
 	serializedReport := r.Serialize(report)
 	_, err := r.TelegramBot.Send(
 		&tb.User{
-			ID: r.Config.TelegramConfig.Chat,
+			ID: r.TelegramAppConfig.Chat,
 		},
 		serializedReport,
 		tb.ModeHTML,
@@ -215,7 +221,7 @@ func (r TelegramReporter) sendMessage(message *tb.Message, text string) {
 func (r TelegramReporter) getHelp(message *tb.Message) {
 	var sb strings.Builder
 	sb.WriteString("<strong>missed-block-checker</strong>\n\n")
-	sb.WriteString(fmt.Sprintf("Query for the %s network info.\n", r.Config.MintscanPrefix))
+	sb.WriteString(fmt.Sprintf("Query for the %s network info.\n", r.ChainInfoConfig.MintscanPrefix))
 	sb.WriteString("Can understand the following commands:\n")
 	sb.WriteString("- /subscribe &lt;validator address&gt; - be notified on validator's missed block in a Telegram channel\n")
 	sb.WriteString("- /unsubscribe &lt;validator address&gt; - undo the subscription given at the previous step\n")
@@ -325,7 +331,7 @@ func (r *TelegramReporter) getValidatorWithMissedBlocksSerialized(
 	))
 	sb.WriteString(fmt.Sprintf(
 		"<a href=\"https://mintscan.io/%s/validators/%s\">Mintscan</a>\n",
-		r.Config.MintscanPrefix,
+		r.ChainInfoConfig.MintscanPrefix,
 		validator.OperatorAddress,
 	))
 
@@ -370,7 +376,7 @@ func (r *TelegramReporter) subscribeToValidatorUpdates(message *tb.Message) {
 	sb.WriteString(fmt.Sprintf("Subscribed to the notification of <code>%s</code> ", validator.Description.Moniker))
 	sb.WriteString(fmt.Sprintf(
 		"<a href=\"https://mintscan.io/%s/validators/%s\">Mintscan</a>\n",
-		r.Config.MintscanPrefix,
+		r.ChainInfoConfig.MintscanPrefix,
 		validator.OperatorAddress,
 	))
 
@@ -419,7 +425,7 @@ func (r *TelegramReporter) unsubscribeFromValidatorUpdates(message *tb.Message) 
 	sb.WriteString(fmt.Sprintf("Unsubscribed from the notification of <code>%s</code> ", validator.Description.Moniker))
 	sb.WriteString(fmt.Sprintf(
 		"<a href=\"https://mintscan.io/%s/validators/%s\">Mintscan</a>\n",
-		r.Config.MintscanPrefix,
+		r.ChainInfoConfig.MintscanPrefix,
 		validator.OperatorAddress,
 	))
 
@@ -433,26 +439,26 @@ func (r *TelegramReporter) unsubscribeFromValidatorUpdates(message *tb.Message) 
 func (r *TelegramReporter) displayConfig(message *tb.Message) {
 	var sb strings.Builder
 
-	if len(r.Config.ExcludeValidators) == 0 && len(r.Config.IncludeValidators) == 0 {
+	if len(r.AppConfig.ExcludeValidators) == 0 && len(r.AppConfig.IncludeValidators) == 0 {
 		sb.WriteString("<strong>Monitoring all validators.\n</strong>")
-	} else if len(r.Config.IncludeValidators) == 0 {
+	} else if len(r.AppConfig.IncludeValidators) == 0 {
 		sb.WriteString("<strong>Monitoring all validators, except the following ones:\n</strong>")
 
-		for _, validator := range r.Config.ExcludeValidators {
+		for _, validator := range r.AppConfig.ExcludeValidators {
 			sb.WriteString(fmt.Sprintf(
 				"- <a href=\"https://mintscan.io/%s/validators/%s\">%s</a>\n",
-				r.Config.MintscanPrefix,
+				r.ChainInfoConfig.MintscanPrefix,
 				validator,
 				validator,
 			))
 		}
-	} else if len(r.Config.ExcludeValidators) == 0 {
+	} else if len(r.AppConfig.ExcludeValidators) == 0 {
 		sb.WriteString("<strong>Monitoring the following validators:\n</strong>")
 
-		for _, validator := range r.Config.IncludeValidators {
+		for _, validator := range r.AppConfig.IncludeValidators {
 			sb.WriteString(fmt.Sprintf(
 				"- <a href=\"https://mintscan.io/%s/validators/%s\">%s</a>\n",
-				r.Config.MintscanPrefix,
+				r.ChainInfoConfig.MintscanPrefix,
 				validator,
 				validator,
 			))
@@ -460,7 +466,7 @@ func (r *TelegramReporter) displayConfig(message *tb.Message) {
 	}
 
 	sb.WriteString("<strong>Missed blocks thresholds:\n</strong>")
-	for _, group := range r.Config.MissedBlocksGroups {
+	for _, group := range r.AppConfig.MissedBlocksGroups {
 		sb.WriteString(fmt.Sprintf("%s %d - %d\n", group.EmojiStart, group.Start, group.End))
 	}
 
@@ -468,16 +474,16 @@ func (r *TelegramReporter) displayConfig(message *tb.Message) {
 }
 
 func (r *TelegramReporter) loadConfigFromYaml() {
-	if _, err := os.Stat(r.Config.TelegramConfig.ConfigPath); os.IsNotExist(err) {
-		r.Logger.Info().Str("path", r.Config.TelegramConfig.ConfigPath).Msg("Telegram config file does not exist, creating.")
-		if _, err = os.Create(r.Config.TelegramConfig.ConfigPath); err != nil {
+	if _, err := os.Stat(r.TelegramAppConfig.ConfigPath); os.IsNotExist(err) {
+		r.Logger.Info().Str("path", r.TelegramAppConfig.ConfigPath).Msg("Telegram config file does not exist, creating.")
+		if _, err = os.Create(r.TelegramAppConfig.ConfigPath); err != nil {
 			r.Logger.Fatal().Err(err).Msg("Could not create Telegram config!")
 		}
 	} else if err != nil {
 		r.Logger.Fatal().Err(err).Msg("Could not fetch Telegram config!")
 	}
 
-	bytes, err := ioutil.ReadFile(r.Config.TelegramConfig.ConfigPath)
+	bytes, err := ioutil.ReadFile(r.TelegramAppConfig.ConfigPath)
 	if err != nil {
 		r.Logger.Fatal().Err(err).Msg("Could not read Telegram config!")
 	}
@@ -492,7 +498,7 @@ func (r *TelegramReporter) loadConfigFromYaml() {
 }
 
 func (r *TelegramReporter) saveYamlConfig() {
-	f, err := os.Create(r.Config.TelegramConfig.ConfigPath)
+	f, err := os.Create(r.TelegramAppConfig.ConfigPath)
 	if err != nil {
 		r.Logger.Fatal().Err(err).Msg("Could not open Telegram config when saving")
 	}
