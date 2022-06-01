@@ -11,11 +11,18 @@ Download the latest release from [the releases page](https://github.com/solarlab
 
 ```sh
 wget <the link from the releases page>
-tar xvfz missed-blocks-checker_*
+tar <downloaded file>
 ./missed-blocks-checker --telegram-token <bot token> --telegram-chat <user or chat ID from the previous step>
 ```
 
-That's not really interesting, what you probably want to do is to have it running in the background. For that, first of all, we have to copy the file to the system apps folder:
+Alternatively, install `golang` (>1.18), clone the repo and build it. This will generate a `./main` binary file in the repository folder:
+```
+git clone https://github.com/solarlabsteam/missed-blocks-checker
+cd missed-blocks-checker
+go build
+```
+
+What you probably want to do is to have it running in the background. For that, first of all, we have to copy the file to the system apps folder:
 
 ```sh
 sudo cp ./missed-blocks-checker /usr/bin
@@ -39,7 +46,7 @@ User=<username>
 TimeoutStartSec=0
 CPUWeight=95
 IOWeight=95
-ExecStart=missed-blocks-checker --telegram-token <bot token> --telegram-chat <user or chat ID>
+ExecStart=missed-blocks-checker --config <config path>
 Restart=always
 RestartSec=2
 LimitNOFILE=800000
@@ -52,9 +59,9 @@ WantedBy=multi-user.target
 Then we'll add this service to the autostart and run it:
 
 ```sh
-sudo systemctl daemon-reload
-sudo systemctl enable missed-blocks-checker
-sudo systemctl start missed-blocks-checker
+sudo systemctl daemon-reload # reload config to reflect changed
+sudo systemctl enable missed-blocks-checker # put service to autostart
+sudo systemctl start missed-blocks-checker # start the service
 sudo systemctl status missed-blocks-checker # validate it's running
 ```
 
@@ -70,37 +77,7 @@ It periodically queries the full node via gRPC for all validators and their miss
 
 ## How can I configure it?
 
-You can pass the artuments to the executable file to configure it. Here is the parameters list:
-
-- `--bech-prefix` - the global prefix for addresses. Defaults to `persistence`
-- `--node` - the gRPC node URL. Defaults to `localhost:9090`
-- `--log-devel` - logger level. Defaults to `info`. You can set it to `debug` to make it more verbose.
-- `--limit` - pagination limit for gRPC requests. Defaults to 1000.
-- `--telegram-token` - Telegram bot token
-- `--telegram-chat` - Telegram user or chat ID
-- `--mintscan-prefix` - This bot generates links to Mintscan for validators, using this prefix. Links have the following format: `https://mintscan.io/<mintscan-prefix>/validator/<validator ID>`. Defaults to `persistence`.
-- `--interval` - Interval between the two checks, in seconds. Defaults to 120
-- `--include` - a comma-separated list of validators' operators addresses. If specified, only the validators from this list would be monitored.
-- `--exclude` - a comma-separated list of validators' operators addresses. If specified, all validators except the ones from this list would be monitored.
-
-(Note that you cannot use `--include` and `--exclude` at the same time.)
-
-
-You can also specify custom Bech32 prefixes for wallets, validators, consensus nodes, and their pubkeys by using the following params:
-- `--bech-validator-prefix`
-- `--bech-validator-pubkey-prefix`
-- `--bech-consensus-node-prefix`
-- `--bech-consensus-node-pubkey-prefix`
-
-By default, if not specified, it defaults to the next values (as it works this way for the most of the networks):
-- `--bech-validator-prefix`  = `--bech-prefix` + "valoper"
-- `--bech-validator-pubkey-prefix` = `--bech-prefix` + "valoperpub"
-- `--bech-consensus-node-prefix` = `--bech-prefix` + "valcons"
-- `--bech-consensus-node-pubkey-prefix` = `--bech-prefix` + "valconspub"
-
-An example of the network where you have to specify all the prefixes manually is Iris.
-
-Additionally, you can pass a `--config` flag with a path to your config file (I use .toml, but anything supported by [viper](https://github.com/spf13/viper) should work).
+All configuration is done via `.toml` config file, which is mandatory. Run the app with `--config <path/to/config.toml>` to specify config. Check out `config.example.toml` to see the params that can be set.
 
 ## Notifications channels
 
@@ -112,13 +89,13 @@ Go to @BotFather in Telegram and create a bot. After that, there are two options
 - you want to send messages to a channel. Write something to a channel, then forward it to @getmyid_bot and copy the `Forwarded from chat` number. Then add the bot as an admin.
 
 
-Then run a program with `--telegram-token <token> --telegram-chat <chat ID>`.
+Then add a Telegram config to your config file (see `config.example.toml` for reference).
 
 2) Slack
 
 Go to the Slack web interface -> Manage apps and create a new app.
 Give the app the `chat:write` scope and add the integration to a channel by typing `/invite <bot username>` there.
-After that, run the program with `--slack-token <token> --slack-chat <channel name>`.
+After that add a Slack config to your config file (see `config.example.toml` for reference).
 
 
 ## Which networks this is guaranteed to work?

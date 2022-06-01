@@ -4,14 +4,31 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/rs/zerolog"
 	"github.com/slack-go/slack"
 )
 
 type SlackReporter struct {
-	SlackToken string
-	SlackChat  string
+	ChainInfoConfig ChainInfoConfig
+	SlackConfig     SlackConfig
+	Params          *Params
+	Logger          zerolog.Logger
 
 	SlackClient slack.Client
+}
+
+func NewSlackReporter(
+	chainInfoConfig ChainInfoConfig,
+	slackConfig SlackConfig,
+	params *Params,
+	logger *zerolog.Logger,
+) *SlackReporter {
+	return &SlackReporter{
+		ChainInfoConfig: chainInfoConfig,
+		SlackConfig:     slackConfig,
+		Params:          params,
+		Logger:          logger.With().Str("component", "slack_reporter").Logger(),
+	}
 }
 
 func (r SlackReporter) Serialize(report Report) string {
@@ -24,12 +41,12 @@ func (r SlackReporter) Serialize(report Report) string {
 		)
 
 		if entry.Direction == INCREASING {
-			timeToJail = fmt.Sprintf(" (%s till jail)", entry.GetTimeToJail())
+			timeToJail = fmt.Sprintf(" (%s till jail)", entry.GetTimeToJail(r.Params))
 		}
 
 		validatorLink = fmt.Sprintf(
 			"<a href=\"https://www.mintscan.io/%s/validators/%s\">%s</a>",
-			Config.MintscanPrefix,
+			r.ChainInfoConfig.MintscanPrefix,
 			entry.ValidatorAddress,
 			entry.ValidatorMoniker,
 		)
@@ -47,23 +64,23 @@ func (r SlackReporter) Serialize(report Report) string {
 }
 
 func (r *SlackReporter) Init() {
-	if r.SlackToken == "" || r.SlackChat == "" {
-		log.Debug().Msg("Slack credentials not set, not creating Slack reporter.")
+	if r.SlackConfig.Token == "" || r.SlackConfig.Chat == "" {
+		r.Logger.Debug().Msg("Slack credentials not set, not creating Slack reporter.")
 		return
 	}
 
-	client := slack.New(r.SlackToken)
+	client := slack.New(r.SlackConfig.Token)
 	r.SlackClient = *client
 }
 
 func (r SlackReporter) Enabled() bool {
-	return r.SlackToken != "" && r.SlackChat != ""
+	return r.SlackConfig.Token != "" && r.SlackConfig.Chat != ""
 }
 
 func (r SlackReporter) SendReport(report Report) error {
 	serializedReport := r.Serialize(report)
 	_, _, err := r.SlackClient.PostMessage(
-		r.SlackChat,
+		r.SlackConfig.Chat,
 		slack.MsgOptionText(serializedReport, false),
 		slack.MsgOptionDisableLinkUnfurl(),
 	)
