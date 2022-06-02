@@ -9,8 +9,6 @@ import (
 	"time"
 
 	"github.com/BurntSushi/toml"
-	slashingtypes "github.com/cosmos/cosmos-sdk/x/slashing/types"
-	stakingtypes "github.com/cosmos/cosmos-sdk/x/staking/types"
 	"github.com/rs/zerolog"
 	tb "gopkg.in/tucnak/telebot.v2"
 )
@@ -256,7 +254,7 @@ func (r *TelegramReporter) getValidatorStatus(message *tb.Message) {
 	address := args[1]
 	r.Logger.Debug().Str("address", address).Msg("getValidatorStatus: address")
 
-	validator, err := r.Client.GetValidator(address)
+	state, err := r.Client.GetValidatorState(address)
 	if err != nil {
 		r.Logger.Error().
 			Str("address", address).
@@ -266,13 +264,7 @@ func (r *TelegramReporter) getValidatorStatus(message *tb.Message) {
 		return
 	}
 
-	signingInfo, err := r.Client.GetSigningInfo(validator)
-	if err != nil {
-		r.sendMessage(message, "Could not get missed blocks info")
-		return
-	}
-
-	r.sendMessage(message, r.getValidatorWithMissedBlocksSerialized(validator, signingInfo))
+	r.sendMessage(message, r.getValidatorWithMissedBlocksSerialized(state))
 	r.Logger.Info().
 		Str("user", message.Sender.Username).
 		Str("address", address).
@@ -291,7 +283,7 @@ func (r *TelegramReporter) getSubscribedValidatorsStatuses(message *tb.Message) 
 	var sb strings.Builder
 
 	for _, address := range subscribedValidators {
-		validator, err := r.Client.GetValidator(address)
+		state, err := r.Client.GetValidatorState(address)
 		if err != nil {
 			r.Logger.Error().
 				Str("address", address).
@@ -301,13 +293,7 @@ func (r *TelegramReporter) getSubscribedValidatorsStatuses(message *tb.Message) 
 			return
 		}
 
-		signingInfo, err := r.Client.GetSigningInfo(validator)
-		if err != nil {
-			r.sendMessage(message, "Could not get missed blocks info")
-			return
-		}
-
-		sb.WriteString(r.getValidatorWithMissedBlocksSerialized(validator, signingInfo))
+		sb.WriteString(r.getValidatorWithMissedBlocksSerialized(state))
 		sb.WriteString("\n")
 	}
 
@@ -317,22 +303,19 @@ func (r *TelegramReporter) getSubscribedValidatorsStatuses(message *tb.Message) 
 		Msg("Successfully returned subscribed validator statuses")
 }
 
-func (r *TelegramReporter) getValidatorWithMissedBlocksSerialized(
-	validator stakingtypes.Validator,
-	signingInfo slashingtypes.ValidatorSigningInfo,
-) string {
+func (r *TelegramReporter) getValidatorWithMissedBlocksSerialized(state ValidatorState) string {
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("<code>%s</code>\n", validator.Description.Moniker))
+	sb.WriteString(fmt.Sprintf("<code>%s</code>\n", state.Moniker))
 	sb.WriteString(fmt.Sprintf(
 		"Missed blocks: %d/%d (%.2f%%)\n",
-		signingInfo.MissedBlocksCounter,
+		state.MissedBlocks,
 		r.Params.SignedBlocksWindow,
-		float64(signingInfo.MissedBlocksCounter)/float64(r.Params.SignedBlocksWindow)*100,
+		float64(state.MissedBlocks)/float64(r.Params.SignedBlocksWindow)*100,
 	))
 	sb.WriteString(fmt.Sprintf(
 		"<a href=\"https://mintscan.io/%s/validators/%s\">Mintscan</a>\n",
 		r.ChainInfoConfig.MintscanPrefix,
-		validator.OperatorAddress,
+		state.Address,
 	))
 
 	return sb.String()

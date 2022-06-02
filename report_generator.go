@@ -4,7 +4,6 @@ import (
 	"fmt"
 
 	codectypes "github.com/cosmos/cosmos-sdk/codec/types"
-	stakingtypes "github.com/cosmos/cosmos-sdk/x/staking/types"
 	"github.com/rs/zerolog"
 )
 
@@ -36,60 +35,15 @@ func NewReportGenerator(
 func (g *ReportGenerator) GetNewState() (ValidatorsState, error) {
 	g.Logger.Debug().Msg("Querying for signing infos...")
 
-	signingInfos, err := g.gRPC.GetSigningInfos()
+	state, err := g.gRPC.GetValidatorsState()
 	if err != nil {
 		g.Logger.Error().Err(err).Msg("Could not query for signing infos")
 		return nil, err
 	}
 
-	validators, err := g.gRPC.GetValidators()
-	if err != nil {
-		g.Logger.Error().Err(err).Msg("Could not query for validators")
-		return nil, err
-	}
-
-	validatorsMap := make(map[string]stakingtypes.Validator, len(validators))
-	for _, validator := range validators {
-		err := validator.UnpackInterfaces(g.Registry)
-		if err != nil {
-			g.Logger.Error().Err(err).Msg("Could not unpack interface")
-			return nil, err
-		}
-
-		pubKey, err := validator.GetConsAddr()
-		if err != nil {
-			g.Logger.Error().Err(err).Msg("Could not get cons addr")
-			return nil, err
-		}
-
-		validatorsMap[pubKey.String()] = validator
-	}
-
-	newState := make(ValidatorsState, len(signingInfos))
-
-	for _, info := range signingInfos {
-		validator, ok := validatorsMap[info.Address]
-		if !ok {
-			g.Logger.Warn().Str("address", info.Address).Msg("Could not find validator by pubkey")
-			continue
-		}
-
-		if !g.Config.IsValidatorMonitored(validator.OperatorAddress) {
-			g.Logger.Trace().Str("address", info.Address).Msg("Not monitoring this validator, skipping.")
-			continue
-		}
-
-		newState[info.Address] = ValidatorState{
-			Address:          validator.OperatorAddress,
-			Moniker:          validator.Description.Moniker,
-			ConsensusAddress: info.Address,
-			MissedBlocks:     info.MissedBlocksCounter,
-			Jailed:           validator.Jailed,
-			Tombstoned:       info.Tombstoned,
-		}
-	}
-
-	return newState, nil
+	return FilterMap(state, func(v ValidatorState) bool {
+		return g.Config.IsValidatorMonitored(v.Address)
+	}), nil
 }
 
 func (g *ReportGenerator) GetValidatorReportEntry(oldState, newState ValidatorState) (*ReportEntry, bool) {

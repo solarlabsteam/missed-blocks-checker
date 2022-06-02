@@ -20,7 +20,11 @@ type TendermintGRPC struct {
 	Registry   codectypes.InterfaceRegistry
 }
 
-func NewTendermintGRPC(nodeConfig NodeConfig, registry codectypes.InterfaceRegistry, logger *zerolog.Logger) *TendermintGRPC {
+func NewTendermintGRPC(
+	nodeConfig NodeConfig,
+	registry codectypes.InterfaceRegistry,
+	logger *zerolog.Logger,
+) *TendermintGRPC {
 	grpcConn, err := grpc.Dial(
 		nodeConfig.GrpcAddress,
 		grpc.WithInsecure(),
@@ -68,7 +72,7 @@ func (grpc *TendermintGRPC) GetSlashingParams() SlashingParams {
 	}
 }
 
-func (grpc *TendermintGRPC) GetSigningInfos() ([]slashingtypes.ValidatorSigningInfo, error) {
+func (grpc *TendermintGRPC) GetValidatorsState() (ValidatorsState, error) {
 	slashingClient := slashingtypes.NewQueryClient(grpc.Client)
 	signingInfos, err := slashingClient.SigningInfos(
 		context.Background(),
@@ -83,10 +87,6 @@ func (grpc *TendermintGRPC) GetSigningInfos() ([]slashingtypes.ValidatorSigningI
 		return nil, err
 	}
 
-	return signingInfos.Info, nil
-}
-
-func (grpc *TendermintGRPC) GetValidators() ([]stakingtypes.Validator, error) {
 	stakingClient := stakingtypes.NewQueryClient(grpc.Client)
 	validatorsResult, err := stakingClient.Validators(
 		context.Background(),
@@ -101,7 +101,36 @@ func (grpc *TendermintGRPC) GetValidators() ([]stakingtypes.Validator, error) {
 		return nil, err
 	}
 
-	return validatorsResult.Validators, nil
+	validatorsMap := make(map[string]stakingtypes.Validator, len(validatorsResult.Validators))
+	for _, validator := range validatorsResult.Validators {
+		err := validator.UnpackInterfaces(grpc.Registry)
+		if err != nil {
+			grpc.Logger.Error().Err(err).Msg("Could not unpack interface")
+			return nil, err
+		}
+
+		pubKey, err := validator.GetConsAddr()
+		if err != nil {
+			grpc.Logger.Error().Err(err).Msg("Could not get cons addr")
+			return nil, err
+		}
+
+		validatorsMap[pubKey.String()] = validator
+	}
+
+	newState := make(ValidatorsState, len(signingInfos.Info))
+
+	for _, info := range signingInfos.Info {
+		validator, ok := validatorsMap[info.Address]
+		if !ok {
+			grpc.Logger.Warn().Str("address", info.Address).Msg("Could not find validator by pubkey")
+			continue
+		}
+
+		newState[info.Address] = NewValidatorState(validator, info)
+	}
+
+	return newState, nil
 }
 
 func (grpc *TendermintGRPC) GetValidator(address string) (stakingtypes.Validator, error) {
@@ -118,16 +147,27 @@ func (grpc *TendermintGRPC) GetValidator(address string) (stakingtypes.Validator
 	return validatorResponse.Validator, nil
 }
 
-func (grpc *TendermintGRPC) GetSigningInfo(validator stakingtypes.Validator) (slashingtypes.ValidatorSigningInfo, error) {
+func (grpc *TendermintGRPC) GetValidatorState(address string) (ValidatorState, error) {
+	stakingClient := stakingtypes.NewQueryClient(grpc.Client)
+
+	validatorResponse, err := stakingClient.Validator(
+		context.Background(),
+		&stakingtypes.QueryValidatorRequest{ValidatorAddr: address},
+	)
+	if err != nil {
+		return ValidatorState{}, err
+	}
+
+	validator := validatorResponse.Validator
 	slashingClient := slashingtypes.NewQueryClient(grpc.Client)
 
-	err := validator.UnpackInterfaces(grpc.Registry) // Unpack interfaces, to populate the Anys' cached values
+	err = validator.UnpackInterfaces(grpc.Registry) // Unpack interfaces, to populate the Anys' cached values
 	if err != nil {
 		grpc.Logger.Error().
 			Str("address", validator.OperatorAddress).
 			Err(err).
 			Msg("Could not get unpack validator inferfaces")
-		return slashingtypes.ValidatorSigningInfo{}, err
+		return ValidatorState{}, err
 	}
 
 	pubKey, err := validator.GetConsAddr()
@@ -136,7 +176,7 @@ func (grpc *TendermintGRPC) GetSigningInfo(validator stakingtypes.Validator) (sl
 			Str("address", validator.OperatorAddress).
 			Err(err).
 			Msg("Could not get validator pubkey")
-		return slashingtypes.ValidatorSigningInfo{}, err
+		return ValidatorState{}, err
 	}
 
 	signingInfosResponse, err := slashingClient.SigningInfo(
@@ -148,8 +188,8 @@ func (grpc *TendermintGRPC) GetSigningInfo(validator stakingtypes.Validator) (sl
 			Str("address", validator.OperatorAddress).
 			Err(err).
 			Msg("Could not get signing info")
-		return slashingtypes.ValidatorSigningInfo{}, err
+		return ValidatorState{}, err
 	}
 
-	return signingInfosResponse.ValSigningInfo, nil
+	return NewValidatorState(validator, signingInfosResponse.ValSigningInfo), nil
 }
