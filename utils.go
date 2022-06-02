@@ -19,7 +19,7 @@ func removeFromSlice(slice []string, r string) []string {
 }
 
 func FilterMap[T any](source map[string]T, f func(T) bool) map[string]T {
-	var n map[string]T
+	n := make(map[string]T, len(source))
 	for key, value := range source {
 		if f(value) {
 			n[key] = value
