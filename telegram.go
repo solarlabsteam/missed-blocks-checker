@@ -10,8 +10,11 @@ import (
 
 	"github.com/BurntSushi/toml"
 	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
 	tb "gopkg.in/tucnak/telebot.v2"
 )
+
+const MaxMessageSize = 4096
 
 type TelegramReporter struct {
 	ChainInfoConfig   ChainInfoConfig
@@ -202,18 +205,29 @@ func (r TelegramReporter) Name() string {
 }
 
 func (r TelegramReporter) sendMessage(message *tb.Message, text string) {
-	_, err := r.TelegramBot.Send(
-		message.Chat,
-		text,
-		&tb.SendOptions{
-			ParseMode:             tb.ModeHTML,
-			ReplyTo:               message,
-			DisableWebPagePreview: true,
-		},
-		tb.NoPreview,
-	)
-	if err != nil {
-		r.Logger.Error().Err(err).Msg("Could not send Telegram message")
+	msgsByNewline := strings.Split(text, "\n")
+
+	var sb strings.Builder
+
+	for _, line := range msgsByNewline {
+		if sb.Len()+len(line) > MaxMessageSize {
+			if _, err := r.TelegramBot.Send(
+				message.Chat,
+				sb.String(),
+				&tb.SendOptions{
+					ParseMode:             tb.ModeHTML,
+					ReplyTo:               message,
+					DisableWebPagePreview: true,
+				},
+				tb.NoPreview,
+			); err != nil {
+				log.Error().Err(err).Msg("Could not send Telegram message")
+			}
+
+			sb.Reset()
+		}
+
+		sb.WriteString(line + "\n")
 	}
 }
 
