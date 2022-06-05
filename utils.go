@@ -27,3 +27,13 @@ func FilterMap[T any](source map[string]T, f func(T) bool) map[string]T {
 	}
 	return n
 }
+
+func Filter[T any](source []T, f func(T) bool) []T {
+	n := []T{}
+	for _, value := range source {
+		if f(value) {
+			n = append(n, value)
+		}
+	}
+	return n
+}

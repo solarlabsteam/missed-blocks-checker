@@ -174,6 +174,7 @@ func (r *TelegramReporter) Init() {
 	r.TelegramBot.Handle("/subscribe", r.subscribeToValidatorUpdates)
 	r.TelegramBot.Handle("/unsubscribe", r.unsubscribeFromValidatorUpdates)
 	r.TelegramBot.Handle("/config", r.displayConfig)
+	r.TelegramBot.Handle("/validators", r.getValidatorsStatus)
 	go r.TelegramBot.Start()
 
 	r.loadConfigFromYaml()
@@ -233,10 +234,7 @@ func (r TelegramReporter) getHelp(message *tb.Message) {
 	sb.WriteString("- <a href=\"https://github.com/solarlabsteam/cosmos-exporter\">cosmos-exporter</a> - scrape the blockchain data from the local node and export it to Prometheus\n")
 	sb.WriteString("- <a href=\"https://github.com/solarlabsteam/coingecko-exporter\">coingecko-exporter</a> - scrape the Coingecko exchange rate and export it to Prometheus\n")
 	sb.WriteString("- <a href=\"https://github.com/solarlabsteam/cosmos-transactions-bot\">cosmos-transactions-bot</a> - monitor the incoming transactions for a given filter\n\n")
-	sb.WriteString("If you like what we're doing, consider staking with us!\n")
-	sb.WriteString("- <a href=\"https://www.mintscan.io/sentinel/validators/sentvaloper1sazxkmhym0zcg9tmzvc4qxesqegs3q4u66tpmf\">Sentinel</a>\n")
-	sb.WriteString("- <a href=\"https://www.mintscan.io/persistence/validators/persistencevaloper1kp2sype5n0ky3f8u50pe0jlfcgwva9y79qlpgy\">Persistence</a>\n")
-	sb.WriteString("- <a href=\"https://www.mintscan.io/osmosis/validators/osmovaloper16jn3383fn4v4vuuvgclr3q7rumeglw8kdq6e48\">Osmosis</a>\n")
+	sb.WriteString("If you like what we're doing, consider <a href=\"https://validator.solar\">staking with us</a>!\n")
 
 	r.sendMessage(message, sb.String())
 	r.Logger.Info().
@@ -269,6 +267,35 @@ func (r *TelegramReporter) getValidatorStatus(message *tb.Message) {
 		Str("user", message.Sender.Username).
 		Str("address", address).
 		Msg("Successfully returned validator status")
+}
+
+func (r *TelegramReporter) getValidatorsStatus(message *tb.Message) {
+	state, err := r.Client.GetValidatorsState()
+	if err != nil {
+		r.Logger.Error().
+			Err(err).
+			Msg("Could not get validators state")
+		r.sendMessage(message, "Could not get validators state")
+		return
+	}
+
+	state = FilterMap(state, func(s ValidatorState) bool {
+		return !s.Jailed
+	})
+
+	sendMessage, err := r.getValidatorsWithMissedBlocksSerialized(state)
+	if err != nil {
+		r.Logger.Error().
+			Err(err).
+			Msg("Error serializing validators")
+		r.sendMessage(message, "Error serializing response")
+		return
+	}
+
+	r.sendMessage(message, sendMessage)
+	r.Logger.Info().
+		Str("user", message.Sender.Username).
+		Msg("Successfully returned validators status")
 }
 
 func (r *TelegramReporter) getSubscribedValidatorsStatuses(message *tb.Message) {
@@ -305,20 +332,42 @@ func (r *TelegramReporter) getSubscribedValidatorsStatuses(message *tb.Message) 
 
 func (r *TelegramReporter) getValidatorWithMissedBlocksSerialized(state ValidatorState) string {
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("<code>%s</code>\n", state.Moniker))
+	sb.WriteString(fmt.Sprintf(
+		"<a href=\"https://mintscan.io/%s/validators/%s\">%s</a>\n",
+		r.ChainInfoConfig.MintscanPrefix,
+		state.Address,
+		state.Moniker,
+	))
 	sb.WriteString(fmt.Sprintf(
 		"Missed blocks: %d/%d (%.2f%%)\n",
 		state.MissedBlocks,
 		r.Params.SignedBlocksWindow,
 		float64(state.MissedBlocks)/float64(r.Params.SignedBlocksWindow)*100,
 	))
-	sb.WriteString(fmt.Sprintf(
-		"<a href=\"https://mintscan.io/%s/validators/%s\">Mintscan</a>\n",
-		r.ChainInfoConfig.MintscanPrefix,
-		state.Address,
-	))
 
 	return sb.String()
+}
+
+func (r *TelegramReporter) getValidatorsWithMissedBlocksSerialized(state ValidatorsState) (string, error) {
+	var sb strings.Builder
+
+	for _, validator := range state {
+		group, err := r.AppConfig.MissedBlocksGroups.GetGroup(validator.MissedBlocks)
+		if err != nil {
+			return "", err
+		}
+
+		sb.WriteString(fmt.Sprintf(
+			"%s <a href=\"https://mintscan.io/%s/validators/%s\">%s</a> (%.2f%%)\n",
+			group.EmojiEnd,
+			r.ChainInfoConfig.MintscanPrefix,
+			validator.Address,
+			validator.Moniker,
+			float64(validator.MissedBlocks)/float64(r.Params.SignedBlocksWindow)*100,
+		))
+	}
+
+	return sb.String(), nil
 }
 
 func (r *TelegramReporter) subscribeToValidatorUpdates(message *tb.Message) {
