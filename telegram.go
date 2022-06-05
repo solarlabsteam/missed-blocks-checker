@@ -230,6 +230,23 @@ func (r TelegramReporter) sendMessage(message *tb.Message, text string) {
 
 		sb.WriteString(line + "\n")
 	}
+
+	if sb.Len() == 0 {
+		return
+	}
+
+	if _, err := r.TelegramBot.Send(
+		message.Chat,
+		sb.String(),
+		&tb.SendOptions{
+			ParseMode:             tb.ModeHTML,
+			ReplyTo:               message,
+			DisableWebPagePreview: true,
+		},
+		tb.NoPreview,
+	); err != nil {
+		log.Error().Err(err).Msg("Could not send Telegram message")
+	}
 }
 
 func (r TelegramReporter) getHelp(message *tb.Message) {
