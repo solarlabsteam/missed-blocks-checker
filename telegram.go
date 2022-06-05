@@ -5,6 +5,7 @@ import (
 	"html"
 	"io/ioutil"
 	"os"
+	"sort"
 	"strings"
 	"time"
 
@@ -297,7 +298,12 @@ func (r *TelegramReporter) getValidatorsStatus(message *tb.Message) {
 		return !s.Jailed
 	})
 
-	sendMessage, err := r.getValidatorsWithMissedBlocksSerialized(state)
+	stateArray := MapToSlice(state)
+	sort.SliceStable(stateArray, func(i, j int) bool {
+		return stateArray[i].MissedBlocks < stateArray[j].MissedBlocks
+	})
+
+	sendMessage, err := r.getValidatorsWithMissedBlocksSerialized(stateArray)
 	if err != nil {
 		r.Logger.Error().
 			Err(err).
@@ -362,7 +368,7 @@ func (r *TelegramReporter) getValidatorWithMissedBlocksSerialized(state Validato
 	return sb.String()
 }
 
-func (r *TelegramReporter) getValidatorsWithMissedBlocksSerialized(state ValidatorsState) (string, error) {
+func (r *TelegramReporter) getValidatorsWithMissedBlocksSerialized(state []ValidatorState) (string, error) {
 	var sb strings.Builder
 
 	for _, validator := range state {
