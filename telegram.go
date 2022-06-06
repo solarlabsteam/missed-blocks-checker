@@ -179,6 +179,7 @@ func (r *TelegramReporter) Init() {
 	r.TelegramBot.Handle("/unsubscribe", r.unsubscribeFromValidatorUpdates)
 	r.TelegramBot.Handle("/config", r.displayConfig)
 	r.TelegramBot.Handle("/validators", r.getValidatorsStatus)
+	r.TelegramBot.Handle("/params", r.getChainParams)
 	go r.TelegramBot.Start()
 
 	r.loadConfigFromYaml()
@@ -335,6 +336,16 @@ func (r *TelegramReporter) getValidatorsStatus(message *tb.Message) {
 		Msg("Successfully returned validators status")
 }
 
+func (r *TelegramReporter) getChainParams(message *tb.Message) {
+	params := r.Client.GetSlashingParams()
+	sendMessage := r.getChainParamsSerialized(params, r.Params)
+
+	r.sendMessage(message, sendMessage)
+	r.Logger.Info().
+		Str("user", message.Sender.Username).
+		Msg("Successfully returned validators status")
+}
+
 func (r *TelegramReporter) getSubscribedValidatorsStatuses(message *tb.Message) {
 	r.Logger.Debug().Msg("getSubscribedValidatorsStatuses")
 
@@ -405,6 +416,38 @@ func (r *TelegramReporter) getValidatorsWithMissedBlocksSerialized(state []Valid
 	}
 
 	return sb.String(), nil
+}
+
+func (r *TelegramReporter) getChainParamsSerialized(
+	slashingParams SlashingParams,
+	params *Params,
+) string {
+	var sb strings.Builder
+
+	sb.WriteString(fmt.Sprintf("<strong>Blocks window</strong>: %d\n", slashingParams.SignedBlocksWindow))
+	sb.WriteString(fmt.Sprintf(
+		"<strong>Validator needs to sign</strong> %.2f%%, or %d blocks in this window.\n",
+		slashingParams.MinSignedPerWindow,
+		slashingParams.MissedBlocksToJail,
+	))
+	sb.WriteString(fmt.Sprintf(
+		"<strong>Slashing factor for downtime slashing:</strong> %.2f%%\n",
+		slashingParams.SlashFractionDowntime*100,
+	))
+	sb.WriteString(fmt.Sprintf(
+		"<strong>Slashing factor for double sign:</strong> %.2f%%\n",
+		slashingParams.SlashFractionDoubleSign*100,
+	))
+	sb.WriteString(fmt.Sprintf(
+		"<strong>Average block time:</strong> %.2f% seconds\n",
+		params.AvgBlockTime,
+	))
+	sb.WriteString(fmt.Sprintf(
+		"<strong>Approximate time to go to jail when missing all blocks:</strong> %s\n",
+		time.Duration(float64(slashingParams.MissedBlocksToJail)*params.AvgBlockTime),
+	))
+
+	return sb.String()
 }
 
 func (r *TelegramReporter) subscribeToValidatorUpdates(message *tb.Message) {

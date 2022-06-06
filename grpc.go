@@ -2,7 +2,7 @@ package main
 
 import (
 	"context"
-	"strconv"
+	"time"
 
 	codectypes "github.com/cosmos/cosmos-sdk/codec/types"
 	querytypes "github.com/cosmos/cosmos-sdk/types/query"
@@ -43,9 +43,12 @@ func NewTendermintGRPC(
 }
 
 type SlashingParams struct {
-	SignedBlocksWindow int64
-	MinSignedPerWindow float64
-	MissedBlocksToJail int64
+	SignedBlocksWindow      int64
+	MinSignedPerWindow      float64
+	MissedBlocksToJail      int64
+	DowntimeJailDuration    time.Duration
+	SlashFractionDoubleSign float64
+	SlashFractionDowntime   float64
 }
 
 func (grpc *TendermintGRPC) GetSlashingParams() SlashingParams {
@@ -58,17 +61,15 @@ func (grpc *TendermintGRPC) GetSlashingParams() SlashingParams {
 		grpc.Logger.Fatal().Err(err).Msg("Could not query slashing params")
 	}
 
-	minSignedPerWindow, err := strconv.ParseFloat(params.Params.MinSignedPerWindow.String(), 64)
-	if err != nil {
-		grpc.Logger.Fatal().
-			Err(err).
-			Msg("Could not parse min signed per window")
-	}
+	minSignedPerWindow := params.Params.MinSignedPerWindow.MustFloat64()
 
 	return SlashingParams{
-		SignedBlocksWindow: params.Params.SignedBlocksWindow,
-		MinSignedPerWindow: minSignedPerWindow,
-		MissedBlocksToJail: int64(float64(params.Params.SignedBlocksWindow) * (1 - minSignedPerWindow)),
+		SignedBlocksWindow:      params.Params.SignedBlocksWindow,
+		MinSignedPerWindow:      minSignedPerWindow,
+		MissedBlocksToJail:      int64(minSignedPerWindow * (1 - minSignedPerWindow)),
+		DowntimeJailDuration:    params.Params.DowntimeJailDuration,
+		SlashFractionDoubleSign: params.Params.SlashFractionDoubleSign.MustFloat64(),
+		SlashFractionDowntime:   params.Params.SlashFractionDowntime.MustFloat64(),
 	}
 }
 
