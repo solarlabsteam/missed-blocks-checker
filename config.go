@@ -25,7 +25,24 @@ type LogConfig struct {
 }
 
 type ChainInfoConfig struct {
-	MintscanPrefix string `toml:"mintscan-prefix"`
+	MintscanPrefix       string `toml:"mintscan-prefix"`
+	ValidatorPagePattern string `toml:"validator-page-pattern"`
+}
+
+func (c *ChainInfoConfig) GetValidatorPage(address string, text string) string {
+	// non-mintscan links
+	if c.ValidatorPagePattern != "" {
+		href := fmt.Sprintf(c.ValidatorPagePattern, address)
+		return fmt.Sprintf("<a href=\"%s\">%s</a>", href, text)
+	}
+
+	return fmt.Sprintf(
+		"<a href=\"https://www.mintscan.io/%s/validators/%s\">%s</a>",
+		c.MintscanPrefix,
+		address,
+		text,
+	)
+
 }
 
 type NodeConfig struct {

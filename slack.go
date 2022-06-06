@@ -44,13 +44,7 @@ func (r SlackReporter) Serialize(report Report) string {
 			timeToJail = fmt.Sprintf(" (%s till jail)", entry.GetTimeToJail(r.Params))
 		}
 
-		validatorLink = fmt.Sprintf(
-			"<a href=\"https://www.mintscan.io/%s/validators/%s\">%s</a>",
-			r.ChainInfoConfig.MintscanPrefix,
-			entry.ValidatorAddress,
-			entry.ValidatorMoniker,
-		)
-
+		validatorLink = r.ChainInfoConfig.GetValidatorPage(entry.ValidatorAddress, entry.ValidatorMoniker)
 		sb.WriteString(fmt.Sprintf(
 			"%s <strong>%s %s</strong>%s\n",
 			entry.Emoji,
