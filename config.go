@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"html"
 	"os"
 
 	"github.com/BurntSushi/toml"
@@ -33,14 +34,14 @@ func (c *ChainInfoConfig) GetValidatorPage(address string, text string) string {
 	// non-mintscan links
 	if c.ValidatorPagePattern != "" {
 		href := fmt.Sprintf(c.ValidatorPagePattern, address)
-		return fmt.Sprintf("<a href=\"%s\">%s</a>", href, text)
+		return fmt.Sprintf("<a href=\"%s\">%s</a>", href, html.EscapeString(text))
 	}
 
 	return fmt.Sprintf(
 		"<a href=\"https://www.mintscan.io/%s/validators/%s\">%s</a>",
 		c.MintscanPrefix,
 		address,
-		text,
+		html.EscapeString(text),
 	)
 }
 
