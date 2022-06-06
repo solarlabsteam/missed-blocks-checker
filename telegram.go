@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"html"
 	"io/ioutil"
+	"math"
 	"os"
 	"sort"
 	"strings"
@@ -422,6 +423,9 @@ func (r *TelegramReporter) getChainParamsSerialized(
 	slashingParams SlashingParams,
 	params *Params,
 ) string {
+	nanoSecondsToJail := float64(slashingParams.MissedBlocksToJail) * params.AvgBlockTime * 1_000_000_000
+	durationToJail := time.Duration(math.Floor(nanoSecondsToJail))
+
 	var sb strings.Builder
 
 	sb.WriteString(fmt.Sprintf("<strong>Blocks window</strong>: %d\n", slashingParams.SignedBlocksWindow))
@@ -439,12 +443,12 @@ func (r *TelegramReporter) getChainParamsSerialized(
 		slashingParams.SlashFractionDoubleSign*100,
 	))
 	sb.WriteString(fmt.Sprintf(
-		"<strong>Average block time:</strong> %.2f% seconds\n",
+		"<strong>Average block time:</strong> %.2f seconds\n",
 		params.AvgBlockTime,
 	))
 	sb.WriteString(fmt.Sprintf(
 		"<strong>Approximate time to go to jail when missing all blocks:</strong> %s\n",
-		time.Duration(float64(slashingParams.MissedBlocksToJail)*params.AvgBlockTime),
+		durationToJail,
 	))
 
 	return sb.String()
