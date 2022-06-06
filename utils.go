@@ -27,3 +27,15 @@ func FilterMap[T any](source map[string]T, f func(T) bool) map[string]T {
 	}
 	return n
 }
+
+func MapToSlice[T any](source map[string]T) []T {
+	n := make([]T, len(source))
+
+	index := 0
+	for _, value := range source {
+		n[index] = value
+		index++
+	}
+
+	return n
+}
