@@ -10,6 +10,7 @@ import (
 	stakingtypes "github.com/cosmos/cosmos-sdk/x/staking/types"
 	"github.com/rs/zerolog"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 )
 
 type TendermintGRPC struct {
@@ -27,7 +28,7 @@ func NewTendermintGRPC(
 ) *TendermintGRPC {
 	grpcConn, err := grpc.Dial(
 		nodeConfig.GrpcAddress,
-		grpc.WithInsecure(),
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
 	)
 	if err != nil {
 		GetDefaultLogger().Fatal().Err(err).Msg("Could not establish gRPC connection")
