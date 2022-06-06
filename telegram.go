@@ -431,7 +431,7 @@ func (r *TelegramReporter) getChainParamsSerialized(
 	sb.WriteString(fmt.Sprintf("<strong>Blocks window</strong>: %d\n", slashingParams.SignedBlocksWindow))
 	sb.WriteString(fmt.Sprintf(
 		"<strong>Validator needs to sign</strong> %.2f%%, or %d blocks in this window.\n",
-		slashingParams.MinSignedPerWindow,
+		slashingParams.MinSignedPerWindow*100,
 		slashingParams.MissedBlocksToJail,
 	))
 	sb.WriteString(fmt.Sprintf(
