@@ -66,7 +66,7 @@ func (grpc *TendermintGRPC) GetSlashingParams() SlashingParams {
 	return SlashingParams{
 		SignedBlocksWindow:      params.Params.SignedBlocksWindow,
 		MinSignedPerWindow:      minSignedPerWindow,
-		MissedBlocksToJail:      int64(minSignedPerWindow * (1 - minSignedPerWindow)),
+		MissedBlocksToJail:      int64(float64(params.Params.SignedBlocksWindow) * (1 - minSignedPerWindow)),
 		DowntimeJailDuration:    params.Params.DowntimeJailDuration,
 		SlashFractionDoubleSign: params.Params.SlashFractionDoubleSign.MustFloat64(),
 		SlashFractionDowntime:   params.Params.SlashFractionDowntime.MustFloat64(),
