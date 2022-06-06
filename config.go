@@ -42,7 +42,6 @@ func (c *ChainInfoConfig) GetValidatorPage(address string, text string) string {
 		address,
 		text,
 	)
-
 }
 
 type NodeConfig struct {
