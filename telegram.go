@@ -135,7 +135,7 @@ func (r TelegramReporter) Serialize(report Report) string {
 			timeToJail = fmt.Sprintf(" (%s till jail)", entry.GetTimeToJail(r.Params))
 		}
 
-		validatorLink = r.ChainInfoConfig.GetValidatorPage(html.EscapeString(entry.ValidatorAddress), entry.ValidatorMoniker)
+		validatorLink = r.ChainInfoConfig.GetValidatorPage(entry.ValidatorAddress, entry.ValidatorMoniker)
 		notifiers := r.TelegramConfig.getNotifiersSerialized(entry.ValidatorAddress)
 
 		sb.WriteString(fmt.Sprintf(
