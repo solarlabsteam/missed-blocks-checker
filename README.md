@@ -88,6 +88,16 @@ Go to @BotFather in Telegram and create a bot. After that, there are two options
 - you want to send messages to a user. This user should write a message to @getmyid_bot, then copy the `Your user ID` number. Also keep in mind that the bot won't be able to send messages unless you contact it first, so write a message to a bot before proceeding.
 - you want to send messages to a channel. Write something to a channel, then forward it to @getmyid_bot and copy the `Forwarded from chat` number. Then add the bot as an admin.
 
+To have fancy commands auto-suggestion, go to @BotFather again, select your bot -> Edit bot -> Edit description and paste the following:
+```
+subscribe - Subscribe to validator's updates
+unsubscribe - Unsubscribe from validator's updates
+status - Get missed blocks info from validators you are subscribed to
+config - Display bot config
+params - Display chain slashing params
+validators - Get the list of all active validators and their missed blocks
+```
+
 
 Then add a Telegram config to your config file (see `config.example.toml` for reference).
 

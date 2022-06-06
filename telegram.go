@@ -135,13 +135,7 @@ func (r TelegramReporter) Serialize(report Report) string {
 			timeToJail = fmt.Sprintf(" (%s till jail)", entry.GetTimeToJail(r.Params))
 		}
 
-		validatorLink = fmt.Sprintf(
-			"<a href=\"https://www.mintscan.io/%s/validators/%s\">%s</a>",
-			r.ChainInfoConfig.MintscanPrefix,
-			html.EscapeString(entry.ValidatorAddress),
-			entry.ValidatorMoniker,
-		)
-
+		validatorLink = r.ChainInfoConfig.GetValidatorPage(entry.ValidatorAddress, entry.ValidatorMoniker)
 		notifiers := r.TelegramConfig.getNotifiersSerialized(entry.ValidatorAddress)
 
 		sb.WriteString(fmt.Sprintf(
@@ -259,8 +253,10 @@ func (r TelegramReporter) getHelp(message *tb.Message) {
 	sb.WriteString("- /subscribe &lt;validator address&gt; - be notified on validator's missed block in a Telegram channel\n")
 	sb.WriteString("- /unsubscribe &lt;validator address&gt; - undo the subscription given at the previous step\n")
 	sb.WriteString("- /status &lt;validator address&gt; - get validator missed blocks\n")
-	sb.WriteString("- /config - display bot config\n")
 	sb.WriteString("- /status - get the missed blocks of the validator(s) you're subscribed to\n\n")
+	sb.WriteString("- /config - display bot config\n")
+	sb.WriteString("- /params - display chain slashing params\n")
+	sb.WriteString("- /validators - display all active validators and their missed blocks\n")
 	sb.WriteString("Created by <a href=\"https://freak12techno.github.io\">freak12techno</a> at <a href=\"https://validator.solar\">SOLAR Labs</a> with ❤️.\n")
 	sb.WriteString("This bot is open-sourced, you can get the source code at https://github.com/solarlabsteam/missed-blocks-checker.\n\n")
 	sb.WriteString("We also maintain the following tools for Cosmos ecosystem:\n")
@@ -381,12 +377,7 @@ func (r *TelegramReporter) getSubscribedValidatorsStatuses(message *tb.Message) 
 
 func (r *TelegramReporter) getValidatorWithMissedBlocksSerialized(state ValidatorState) string {
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf(
-		"<a href=\"https://mintscan.io/%s/validators/%s\">%s</a>\n",
-		r.ChainInfoConfig.MintscanPrefix,
-		state.Address,
-		state.Moniker,
-	))
+	sb.WriteString(r.ChainInfoConfig.GetValidatorPage(state.Address, state.Moniker) + "\n")
 	sb.WriteString(fmt.Sprintf(
 		"Missed blocks: %d/%d (%.2f%%)\n",
 		state.MissedBlocks,
@@ -407,11 +398,9 @@ func (r *TelegramReporter) getValidatorsWithMissedBlocksSerialized(state []Valid
 		}
 
 		sb.WriteString(fmt.Sprintf(
-			"%s <a href=\"https://mintscan.io/%s/validators/%s\">%s</a> (%.2f%%)\n",
+			"%s %s (%.2f%%)\n",
 			group.EmojiEnd,
-			r.ChainInfoConfig.MintscanPrefix,
-			validator.Address,
-			validator.Moniker,
+			r.ChainInfoConfig.GetValidatorPage(validator.Address, validator.Moniker),
 			float64(validator.MissedBlocks)/float64(r.Params.SignedBlocksWindow)*100,
 		))
 	}
@@ -490,11 +479,7 @@ func (r *TelegramReporter) subscribeToValidatorUpdates(message *tb.Message) {
 
 	var sb strings.Builder
 	sb.WriteString(fmt.Sprintf("Subscribed to the notification of <code>%s</code> ", validator.Description.Moniker))
-	sb.WriteString(fmt.Sprintf(
-		"<a href=\"https://mintscan.io/%s/validators/%s\">Mintscan</a>\n",
-		r.ChainInfoConfig.MintscanPrefix,
-		validator.OperatorAddress,
-	))
+	sb.WriteString(r.ChainInfoConfig.GetValidatorPage(validator.OperatorAddress, "Explorer"))
 
 	r.sendMessage(message, sb.String())
 	r.Logger.Info().
@@ -539,11 +524,7 @@ func (r *TelegramReporter) unsubscribeFromValidatorUpdates(message *tb.Message) 
 
 	var sb strings.Builder
 	sb.WriteString(fmt.Sprintf("Unsubscribed from the notification of <code>%s</code> ", validator.Description.Moniker))
-	sb.WriteString(fmt.Sprintf(
-		"<a href=\"https://mintscan.io/%s/validators/%s\">Mintscan</a>\n",
-		r.ChainInfoConfig.MintscanPrefix,
-		validator.OperatorAddress,
-	))
+	sb.WriteString(r.ChainInfoConfig.GetValidatorPage(validator.OperatorAddress, "Explorer"))
 
 	r.sendMessage(message, sb.String())
 	r.Logger.Info().
@@ -561,23 +542,13 @@ func (r *TelegramReporter) displayConfig(message *tb.Message) {
 		sb.WriteString("<strong>Monitoring all validators, except the following ones:\n</strong>")
 
 		for _, validator := range r.AppConfig.ExcludeValidators {
-			sb.WriteString(fmt.Sprintf(
-				"- <a href=\"https://mintscan.io/%s/validators/%s\">%s</a>\n",
-				r.ChainInfoConfig.MintscanPrefix,
-				validator,
-				validator,
-			))
+			sb.WriteString(" - " + r.ChainInfoConfig.GetValidatorPage(validator, validator) + "\n")
 		}
 	} else if len(r.AppConfig.ExcludeValidators) == 0 {
 		sb.WriteString("<strong>Monitoring the following validators:\n</strong>")
 
 		for _, validator := range r.AppConfig.IncludeValidators {
-			sb.WriteString(fmt.Sprintf(
-				"- <a href=\"https://mintscan.io/%s/validators/%s\">%s</a>\n",
-				r.ChainInfoConfig.MintscanPrefix,
-				validator,
-				validator,
-			))
+			sb.WriteString("- " + r.ChainInfoConfig.GetValidatorPage(validator, validator) + "\n")
 		}
 	}
 

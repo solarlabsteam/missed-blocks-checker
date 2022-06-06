@@ -37,6 +37,11 @@ json = true
 [chain-info]
 # Mintscan prefix, to generate links to validator.
 mintscan-prefix = "cosmos"
+# A generic explorer validator page pattern. Should contain %s, which will be replaced
+# with validator's moniker, see example. Useful when a project isn't presented on Mintscan,
+# but has its own explorer instead. See the example below for Bitsong.
+# If provided, then mintscan-prefix is ignored.
+validator-page-pattern = "https://explorebitsong.com/validators/%s"
 
 # List of missed blocks groups.
 [[missed-blocks-groups]]
