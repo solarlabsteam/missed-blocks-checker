@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"html"
-	"io/ioutil"
 	"math"
 	"os"
 	"sort"
@@ -588,7 +587,7 @@ func (r *TelegramReporter) loadConfigFromYaml() {
 		r.Logger.Fatal().Err(err).Msg("Could not fetch Telegram config!")
 	}
 
-	bytes, err := ioutil.ReadFile(r.TelegramAppConfig.ConfigPath)
+	bytes, err := os.ReadFile(r.TelegramAppConfig.ConfigPath)
 	if err != nil {
 		r.Logger.Fatal().Err(err).Msg("Could not read Telegram config!")
 	}
