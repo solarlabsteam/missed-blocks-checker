@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"html"
-	"io/ioutil"
 	"math"
 	"os"
 	"sort"
@@ -173,7 +172,12 @@ func (r *TelegramReporter) Init() {
 	r.TelegramBot.Handle("/subscribe", r.subscribeToValidatorUpdates)
 	r.TelegramBot.Handle("/unsubscribe", r.unsubscribeFromValidatorUpdates)
 	r.TelegramBot.Handle("/config", r.displayConfig)
-	r.TelegramBot.Handle("/validators", r.getValidatorsStatus)
+	r.TelegramBot.Handle("/validators", func(message *tb.Message) {
+		r.getValidatorsStatus(message, false)
+	})
+	r.TelegramBot.Handle("/missing", func(message *tb.Message) {
+		r.getValidatorsStatus(message, true)
+	})
 	r.TelegramBot.Handle("/params", r.getChainParams)
 	go r.TelegramBot.Start()
 
@@ -257,6 +261,7 @@ func (r TelegramReporter) getHelp(message *tb.Message) {
 	sb.WriteString("- /config - display bot config\n")
 	sb.WriteString("- /params - display chain slashing params\n")
 	sb.WriteString("- /validators - display all active validators and their missed blocks\n")
+	sb.WriteString("- /missing - display only validators missing blocks above threshold and their missing blocks\n")
 	sb.WriteString("Created by <a href=\"https://freak12techno.github.io\">freak12techno</a> at <a href=\"https://validator.solar\">SOLAR Labs</a> with ❤️.\n")
 	sb.WriteString("This bot is open-sourced, you can get the source code at https://github.com/solarlabsteam/missed-blocks-checker.\n\n")
 	sb.WriteString("We also maintain the following tools for Cosmos ecosystem:\n")
@@ -299,7 +304,7 @@ func (r *TelegramReporter) getValidatorStatus(message *tb.Message) {
 		Msg("Successfully returned validator status")
 }
 
-func (r *TelegramReporter) getValidatorsStatus(message *tb.Message) {
+func (r *TelegramReporter) getValidatorsStatus(message *tb.Message, getOnlyMissing bool) {
 	state, err := r.Client.GetValidatorsState()
 	if err != nil {
 		r.Logger.Error().
@@ -310,6 +315,18 @@ func (r *TelegramReporter) getValidatorsStatus(message *tb.Message) {
 	}
 
 	state = FilterMap(state, func(s ValidatorState) bool {
+		if getOnlyMissing {
+			group, err := r.AppConfig.MissedBlocksGroups.GetGroup(s.MissedBlocks)
+			if err != nil {
+				r.Logger.Error().
+					Err(err).
+					Msg("Could not get validator missed block group")
+				return !s.Jailed
+			}
+
+			return !s.Jailed && group.Start != 0
+		}
+
 		return !s.Jailed
 	})
 
@@ -570,7 +587,7 @@ func (r *TelegramReporter) loadConfigFromYaml() {
 		r.Logger.Fatal().Err(err).Msg("Could not fetch Telegram config!")
 	}
 
-	bytes, err := ioutil.ReadFile(r.TelegramAppConfig.ConfigPath)
+	bytes, err := os.ReadFile(r.TelegramAppConfig.ConfigPath)
 	if err != nil {
 		r.Logger.Fatal().Err(err).Msg("Could not read Telegram config!")
 	}

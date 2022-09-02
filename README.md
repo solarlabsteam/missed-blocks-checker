@@ -96,6 +96,7 @@ status - Get missed blocks info from validators you are subscribed to
 config - Display bot config
 params - Display chain slashing params
 validators - Get the list of all active validators and their missed blocks
+missing - Get the list of validators who have missed blocks counter above threshold and their missed blocks
 ```
 
 
