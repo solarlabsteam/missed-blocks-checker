@@ -321,13 +321,13 @@ func (r *TelegramReporter) getValidatorsStatus(message *tb.Message, getOnlyMissi
 				r.Logger.Error().
 					Err(err).
 					Msg("Could not get validator missed block group")
-				return !s.Jailed
+				return s.Active
 			}
 
-			return !s.Jailed && group.Start != 0
+			return s.Active && group.Start != 0
 		}
 
-		return !s.Jailed
+		return s.Active
 	})
 
 	stateArray := MapToSlice(state)

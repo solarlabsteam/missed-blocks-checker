@@ -35,6 +35,7 @@ type ValidatorState struct {
 	ConsensusAddress string
 	MissedBlocks     int64
 	Jailed           bool
+	Active           bool
 	Tombstoned       bool
 }
 
@@ -48,6 +49,7 @@ func NewValidatorState(
 		ConsensusAddress: info.Address,
 		MissedBlocks:     info.MissedBlocksCounter,
 		Jailed:           validator.Jailed,
+		Active:           validator.Status == 3, // BOND_STATUS_BONDED
 		Tombstoned:       info.Tombstoned,
 	}
 }
