@@ -49,7 +49,7 @@ func NewValidatorState(
 		ConsensusAddress: info.Address,
 		MissedBlocks:     info.MissedBlocksCounter,
 		Jailed:           validator.Jailed,
-		Active:           validator.Status == 3,
+		Active:           validator.Status == 3, // BOND_STATUS_BONDED
 		Tombstoned:       info.Tombstoned,
 	}
 }
