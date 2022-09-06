@@ -178,7 +178,6 @@ func (grpc *TendermintGRPC) GetValidatorsStateWithEachSigningInfo() (ValidatorsS
 				ConsAddress: pubKey.String(),
 			},
 		)
-
 		if err != nil {
 			grpc.Logger.Error().Err(err).Msg("Could not query for signing info")
 			continue
