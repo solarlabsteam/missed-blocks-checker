@@ -43,7 +43,7 @@ func Execute(configPath string) {
 	interfaceRegistry := encCfg.InterfaceRegistry
 
 	rpc := NewTendermintRPC(appConfig.NodeConfig, log)
-	grpc := NewTendermintGRPC(appConfig.NodeConfig, interfaceRegistry, log)
+	grpc := NewTendermintGRPC(appConfig.NodeConfig, interfaceRegistry, appConfig.QueryEachSigningInfo, log)
 	slashingParams := grpc.GetSlashingParams()
 
 	params := Params{

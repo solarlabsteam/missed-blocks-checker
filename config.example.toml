@@ -16,6 +16,14 @@ include-validators = ["cosmosvaloperxxx"]
 # List of validators to exclude from monitoring, with it specified, all validators except mentioned
 # will be monitored. Cannot be used together with include-validators.
 exclude-validators = ["cosmosvaloperyyy"]
+# Some chains, likely cosmos-sdk, return signing-info without an address, making it impossible
+# to match some validators with their signing info, as a result, the validators list returned
+# by Telegram bot and the list of monitored validators isn't full. This flag, instead of querying
+# all signing infos with a single request, does a query for each validator asking for its signing info.
+# This is super ugly and resource consuming, but probably is the only solution. If you face
+# the issue of not validators appearing in the list, try switching it to true.
+# Defaults to false.
+query-each-signing-info = false
 
 # Node config.
 [node]

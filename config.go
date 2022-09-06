@@ -55,7 +55,8 @@ type AppConfig struct {
 	ChainInfoConfig ChainInfoConfig `toml:"chain-info"`
 	NodeConfig      NodeConfig      `toml:"node"`
 
-	Interval int `toml:"interval" default:"120"`
+	QueryEachSigningInfo bool `toml:"query-each-signing-info"`
+	Interval             int  `toml:"interval" default:"120"`
 
 	Prefix                    string `toml:"bech-prefix"`
 	ValidatorPrefix           string `toml:"bech-validator-prefix"`
