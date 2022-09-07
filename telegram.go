@@ -407,6 +407,7 @@ func (r *TelegramReporter) getValidatorWithMissedBlocksSerialized(state Validato
 
 func (r *TelegramReporter) getValidatorsWithMissedBlocksSerialized(state []ValidatorState) (string, error) {
 	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("<strong>Total validators:</strong> %d\n", len(state)))
 
 	for _, validator := range state {
 		group, err := r.AppConfig.MissedBlocksGroups.GetGroup(validator.MissedBlocks)
